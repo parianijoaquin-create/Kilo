@@ -1,0 +1,133 @@
+@import "tailwindcss";
+
+/* ─── Design tokens — idénticos al prototipo ─────────────────── */
+:root {
+  /* Backgrounds */
+  --bg-0: #06090F;        /* deep navy (canvas) */
+  --bg-1: #0D1320;        /* card */
+  --bg-2: #161F33;        /* raised / track */
+  --line-1: #1C2640;      /* hairline */
+  --line-2: #2A3554;      /* stronger line */
+
+  /* Text */
+  --text-1: #F0F3FA;
+  --text-2: #8090B0;
+  --text-3: #4D5A78;
+
+  /* Brand */
+  --lime: #C6FF50;
+  --lime-glow: rgba(198, 255, 80, 0.25);
+
+  /* Semantic accents */
+  --blue: #5B8DEF;
+  --orange: #FF9E5C;
+  --red: #FF6B6B;
+  --violet: #9D7CFF;
+
+  /* Typography — cargadas via next/font */
+  --font-display: var(--font-space-grotesk), system-ui, sans-serif;
+  --font-body: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+
+  /* Page background */
+  --page-bg: radial-gradient(ellipse at 50% 0%, #0E1626 0%, #06090F 60%);
+
+  /* ─── Motion tokens (del Kit mobile-first PDF) ──────────────── */
+  --motion-tap:   150ms ease;                            /* tap/press feedback  */
+  --motion-state: 250ms cubic-bezier(0.22, 1, 0.36, 1); /* state transitions   */
+  --motion-sheet: 400ms cubic-bezier(0.32, 0.72, 0, 1); /* bottom sheet        */
+  --motion-ring:  1200ms cubic-bezier(0.22, 1, 0.36, 1);/* SVG ring fill       */
+  --motion-fade:  200ms ease;                            /* fade in/out         */
+}
+
+/* ─── Reset & base ──────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--page-bg);
+  color: var(--text-1);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100svh;
+  font-feature-settings: "ss01", "cv01";
+}
+
+/* Hide all scrollbars */
+::-webkit-scrollbar {
+  display: none;
+}
+* {
+  scrollbar-width: none;
+}
+
+/* Number inputs */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+/* ─── Screen fade-up animation ──────────────────────────────── */
+@keyframes kiloFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.kilo-screen-enter {
+  animation: kiloFadeUp var(--motion-state) both;
+}
+
+/* ─── Tap feedback (en todos los elementos clickeables) ─────── */
+.kilo-pressable {
+  transition: transform var(--motion-tap), opacity var(--motion-tap);
+}
+.kilo-pressable:active {
+  transform: scale(0.97);
+  opacity: 0.85;
+}
+
+/* ─── Skeleton loader pulse ─────────────────────────────────── */
+@keyframes kiloSkeleton {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 0.7; }
+}
+
+.kilo-skeleton {
+  background: var(--bg-2);
+  border-radius: 8px;
+  animation: kiloSkeleton 1.6s ease-in-out infinite;
+}
+
+/* ─── Reduced motion ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .kilo-screen-enter {
+    animation: none;
+  }
+  .kilo-pressable {
+    transition: none;
+  }
+  .kilo-skeleton {
+    animation: none;
+    opacity: 0.5;
+  }
+}
