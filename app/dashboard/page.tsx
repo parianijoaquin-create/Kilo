@@ -20,8 +20,10 @@ import {
 import { Stat } from "@/components/ui/Stat";
 import { Bar } from "@/components/ui/Bar";
 import { KILO_DATA, fmtNum } from "@/data/mock";
+import { useSheet } from "@/context/SheetContext";
 
 export default function DashboardPage() {
+  const { openSheet } = useSheet();
   const D = KILO_DATA;
   const t = D.today;
 
@@ -141,7 +143,7 @@ export default function DashboardPage() {
         <SectionHead title="Hoy comí" action="Ver diario →" />
         <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
           {D.meals.map((meal) => (
-            <MealCard key={meal.id} meal={meal} onAdd={() => {}} />
+            <MealCard key={meal.id} meal={meal} onAdd={() => openSheet(meal.id)} />
           ))}
         </div>
 

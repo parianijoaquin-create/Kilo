@@ -39,7 +39,7 @@ export function useAuth() {
       password,
       options: { data: { display_name: displayName ?? email.split("@")[0] } },
     });
-    if (!error) router.push("/dashboard");
+    if (!error) router.push("/onboarding");
     return { error };
   }, []);
 

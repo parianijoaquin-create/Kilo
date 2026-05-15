@@ -7,6 +7,7 @@ import { Bar } from "@/components/ui/Bar";
 import { Stat } from "@/components/ui/Stat";
 import { IconSearch, IconPlus, IconDroplet } from "@/components/icons";
 import { KILO_DATA, fmtNum } from "@/data/mock";
+import { useSheet } from "@/context/SheetContext";
 import type { MockMeal, MockMealItem } from "@/types";
 
 const MEAL_ICONS: Record<string, string> = {
@@ -90,7 +91,7 @@ function FoodLogRow({ item, isFirst, isLast }: { item: MockMealItem; isFirst: bo
   );
 }
 
-function MealSection({ meal }: { meal: MockMeal }) {
+function MealSection({ meal, onAdd }: { meal: MockMeal; onAdd: (mealId: string) => void }) {
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{
@@ -123,7 +124,9 @@ function MealSection({ meal }: { meal: MockMeal }) {
       </div>
 
       {meal.items.length === 0 ? (
-        <button style={{
+        <button
+          onClick={() => onAdd(meal.id)}
+          style={{
           width: "100%",
           background: "transparent",
           border: "1.5px dashed var(--line-2)",
@@ -151,7 +154,9 @@ function MealSection({ meal }: { meal: MockMeal }) {
               isLast={idx === meal.items.length - 1}
             />
           ))}
-          <button style={{
+          <button
+            onClick={() => onAdd(meal.id)}
+            style={{
             marginTop: 6,
             background: "transparent",
             border: "none",
@@ -176,6 +181,7 @@ function MealSection({ meal }: { meal: MockMeal }) {
 
 export default function DiaryPage() {
   const D = KILO_DATA;
+  const { openSheet } = useSheet();
   const t = D.today;
   const totals = { kcal: 0, p: 0, c: 0, f: 0 };
   D.meals.forEach((m) => {
@@ -337,7 +343,7 @@ export default function DiaryPage() {
         {/* Meal sections */}
         <div style={{ padding: "8px 20px 0" }}>
           {D.meals.map((meal) => (
-            <MealSection key={meal.id} meal={meal} />
+            <MealSection key={meal.id} meal={meal} onAdd={openSheet} />
           ))}
         </div>
 

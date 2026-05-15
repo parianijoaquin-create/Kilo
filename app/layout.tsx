@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
+import { ClientProviders } from "@/components/layout/ClientProviders";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -53,7 +54,9 @@ export default function RootLayout({
       lang="es-AR"
       className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <ClientProviders>{children}</ClientProviders>
+      </body>
     </html>
   );
 }

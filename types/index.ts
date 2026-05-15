@@ -203,6 +203,7 @@ export interface Habit {
   frequency: HabitFrequency;
   is_active: boolean;
   created_at: string;
+  habit_logs?: HabitLog[];
 }
 
 export interface HabitLog {
