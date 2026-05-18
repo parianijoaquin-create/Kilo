@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Sheet } from "@/components/ui/Sheet";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
 import { createClient } from "@/lib/supabase/client";
@@ -128,11 +128,11 @@ export function AddFoodSheet() {
   const scanTimerRef = useRef<number | null>(null);
   const detectorRef = useRef<InstanceType<BarcodeDetectorConstructor> | null>(null);
   const scanInFlightRef = useRef(false);
+  const supabase = useMemo(() => createClient(), []);
 
   const fetchFoods = useCallback(async (q: string) => {
     setLoading(true);
     setError(null);
-    const supabase = createClient();
     const req = supabase
       .from("foods")
       .select("id, source_food_id, canonical_name, kcal_100g, protein_g_100g, carbs_g_100g, fat_g_100g, fiber_g_100g, default_portion_g, default_portion_name");

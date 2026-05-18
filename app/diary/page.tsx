@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Screen } from "@/components/layout/Screen";
 import { Ring } from "@/components/ui/Ring";
@@ -29,15 +29,16 @@ const MEAL_ICONS: Record<string, string> = {
   dinner: "🌙",
 };
 
-const DATE_STRIP = [
-  { d: "Sá", n: 9 },
-  { d: "Do", n: 10 },
-  { d: "Lu", n: 11 },
-  { d: "Ma", n: 12 },
-  { d: "Mi", n: 13 },
-  { d: "Ju", n: 14, today: true },
-  { d: "Vi", n: 15, future: true },
-];
+const DAY_LABELS = ["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sá"];
+
+function buildDateStrip() {
+  const now = new Date();
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(now);
+    d.setDate(now.getDate() - 5 + i);
+    return { d: DAY_LABELS[d.getDay()], n: d.getDate(), today: i === 5, future: i > 5 };
+  });
+}
 
 function fmtNum(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
@@ -207,6 +208,7 @@ export default function DiaryPage() {
   const today = new Date().toISOString().split("T")[0];
   const { meals, totals, addMealItem } = useDiary(today);
   const t = GOALS;
+  const DATE_STRIP = useMemo(() => buildDateStrip(), []);
 
   const addFoodToMeal = useCallback(async (food: FoodSearchResult, mealType: string) => {
     const grams = food.default_portion_g ?? 100;

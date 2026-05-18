@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 export interface WeightEntry {
@@ -14,7 +14,7 @@ export function useWeightLog() {
   const [history, setHistory] = useState<WeightEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const savingRef = useRef(false);
 
   useEffect(() => {
@@ -72,10 +72,16 @@ export function useWeightLog() {
       return { error: insertErr.message };
     }
 
-    await supabase
+    const { error: profileErr } = await supabase
       .from("profiles")
       .update({ current_weight_kg: weight_kg, updated_at: new Date().toISOString() })
       .eq("id", user.id);
+
+    if (profileErr) {
+      savingRef.current = false;
+      setSaving(false);
+      return { error: profileErr.message };
+    }
 
     setHistory((prev) => [newEntry as WeightEntry, ...prev]);
 

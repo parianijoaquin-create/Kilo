@@ -61,7 +61,7 @@ function gtinType(barcode: string) {
 
 function countryFrom(tags: string[] | undefined) {
   const ar = tags?.find((tag) => tag.toLowerCase().includes("argentina"));
-  return ar ? "AR" : "AR";
+  return ar ? "AR" : null;
 }
 
 function adminClient() {
