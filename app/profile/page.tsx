@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useRef } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Screen } from "@/components/layout/Screen";
 import { SectionHead } from "@/components/ui/SectionHead";
@@ -11,12 +12,12 @@ import {
 import { KILO_DATA } from "@/data/mock";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { useWeightLog } from "@/hooks/useWeightLog";
 
-const STATS = [
-  { l: "Peso actual", v: "73.4", u: "kg",    delta: "−0.6"      },
-  { l: "Meta",        v: "70.0", u: "kg",    delta: "−3.4 a ir" },
-  { l: "Racha máx.",  v: "21",   u: "días",  delta: "creatina"  },
-  { l: "Total días",  v: "47",   u: "",      delta: "en Kilo"   },
+const OTHER_STATS = [
+  { l: "Meta",       u: "kg",   delta: "−3.4 a ir" },
+  { l: "Racha máx.", u: "días", delta: "creatina"  },
+  { l: "Total días", u: "",     delta: "en Kilo"   },
 ];
 
 const SETTINGS_ROWS = [
@@ -30,7 +31,40 @@ export default function ProfilePage() {
   const D = KILO_DATA;
   const { signOut } = useAuth();
   const { profile } = useProfile();
+  const { latestWeight, logWeight, saving } = useWeightLog();
+
   const displayName = profile?.display_name || D.user.name;
+  const displayWeight = latestWeight ?? profile?.current_weight_kg;
+
+  const [editingWeight, setEditingWeight] = useState(false);
+  const [weightInput, setWeightInput] = useState("");
+  const [savedMsg, setSavedMsg] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function saveWeight() {
+    const kg = parseFloat(weightInput.replace(",", "."));
+    if (!weightInput || isNaN(kg) || kg <= 0) return;
+
+    const { error } = await logWeight(kg);
+    if (!error) {
+      setEditingWeight(false);
+      setWeightInput("");
+      setSavedMsg(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setSavedMsg(false), 2500);
+    }
+  }
+
+  function openEdit() {
+    setWeightInput(displayWeight != null ? String(displayWeight) : "");
+    setEditingWeight(true);
+  }
+
+  const otherStatValues = [
+    profile?.goal_weight_kg != null ? String(profile.goal_weight_kg) : D.user.weightTarget.toString(),
+    "21",
+    "47",
+  ];
 
   return (
     <AppShell>
@@ -64,7 +98,7 @@ export default function ProfilePage() {
                 {displayName}
               </div>
               <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2, fontFamily: "var(--font-mono)", letterSpacing: "0.01em" }}>
-                {D.user.age} años · {D.user.height}cm · {D.user.weight}kg
+                {D.user.age} años · {D.user.height}cm · {displayWeight != null ? `${displayWeight}kg` : `${D.user.weight}kg`}
               </div>
               <div style={{
                 marginTop: 8, display: "inline-flex", gap: 4,
@@ -82,19 +116,117 @@ export default function ProfilePage() {
 
         {/* Stats grid */}
         <div style={{ padding: "12px 20px 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          {STATS.map((s) => (
+
+          {/* ── Peso actual: clickeable para registrar nuevo peso ── */}
+          <div
+            onClick={!editingWeight ? openEdit : undefined}
+            className={!editingWeight ? "kilo-pressable" : undefined}
+            style={{
+              background: "var(--bg-1)",
+              border: `1px solid ${editingWeight ? "var(--lime)" : "var(--line-1)"}`,
+              borderRadius: 16,
+              padding: 14,
+              cursor: !editingWeight ? "pointer" : "default",
+            }}
+          >
+            <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "var(--font-mono)", fontWeight: 600 }}>
+              Peso actual
+            </div>
+
+            {!editingWeight ? (
+              <>
+                <div style={{ marginTop: 8 }}>
+                  <Stat value={displayWeight != null ? String(displayWeight) : "–"} unit="kg" size={24} />
+                </div>
+                <div style={{ fontSize: 11, color: "var(--lime)", marginTop: 4, fontFamily: "var(--font-mono)" }}>
+                  {savedMsg ? "✓ guardado" : "↓ registrar"}
+                </div>
+              </>
+            ) : (
+              <>
+                <input
+                  autoFocus
+                  type="number"
+                  value={weightInput}
+                  onChange={(e) => setWeightInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveWeight();
+                    if (e.key === "Escape") { setEditingWeight(false); setWeightInput(""); }
+                  }}
+                  placeholder="73.4"
+                  step="0.1"
+                  min="1"
+                  style={{
+                    marginTop: 8,
+                    width: "100%",
+                    background: "var(--bg-2)",
+                    border: "1px solid var(--lime)",
+                    borderRadius: 8,
+                    color: "var(--text-1)",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 18,
+                    fontWeight: 600,
+                    padding: "4px 8px",
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); saveWeight(); }}
+                    disabled={saving}
+                    style={{
+                      flex: 1,
+                      padding: "5px 0",
+                      background: "var(--lime)",
+                      border: "none",
+                      borderRadius: 7,
+                      color: "#0a0d15",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      fontFamily: "var(--font-mono)",
+                      cursor: saving ? "not-allowed" : "pointer",
+                      opacity: saving ? 0.7 : 1,
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    {saving ? "…" : "GUARDAR"}
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setEditingWeight(false); setWeightInput(""); }}
+                    style={{
+                      padding: "5px 10px",
+                      background: "transparent",
+                      border: "1px solid var(--line-2)",
+                      borderRadius: 7,
+                      color: "var(--text-3)",
+                      fontSize: 10,
+                      fontFamily: "var(--font-mono)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* ── Resto de stats (hardcoded) ── */}
+          {OTHER_STATS.map((s, i) => (
             <div key={s.l} style={{ background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 16, padding: 14 }}>
               <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "var(--font-mono)", fontWeight: 600 }}>
                 {s.l}
               </div>
               <div style={{ marginTop: 8 }}>
-                <Stat value={s.v} unit={s.u} size={24} />
+                <Stat value={otherStatValues[i]} unit={s.u} size={24} />
               </div>
               <div style={{ fontSize: 11, color: "var(--lime)", marginTop: 4, fontFamily: "var(--font-mono)" }}>
                 {s.delta}
               </div>
             </div>
           ))}
+
         </div>
 
         {/* Settings list */}
@@ -145,7 +277,6 @@ export default function ProfilePage() {
           </button>
         </div>
 
-        {/* Kilo wordmark */}
         <div style={{ textAlign: "center", marginTop: 30, fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 500, letterSpacing: "-0.05em", color: "var(--text-3)", opacity: 0.4 }}>
           kilo<span style={{ color: "var(--lime)" }}>.</span>
         </div>

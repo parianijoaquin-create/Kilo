@@ -74,7 +74,7 @@ export function useHabits() {
     } else {
       const { data: newLog, error } = await supabase
         .from("habit_logs")
-        .insert({ habit_id: habitId, user_id: user.id, log_date: today, logged_at: new Date().toISOString(), status: "done" })
+        .insert({ habit_id: habitId, user_id: user.id, logged_at: new Date().toISOString(), status: "done" })
         .select()
         .single();
 

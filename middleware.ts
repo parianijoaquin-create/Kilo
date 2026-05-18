@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_ROUTES = ["/auth/login", "/auth/register"];
+const PUBLIC_ROUTES = ["/login", "/register"];
 const AUTH_ACCESSIBLE_ROUTES = ["/onboarding"];
 
 export async function middleware(request: NextRequest) {
@@ -38,7 +38,7 @@ export async function middleware(request: NextRequest) {
 
   if (!user && !isPublic && !isAuthAccessible) {
     const url = request.nextUrl.clone();
-    url.pathname = "/auth/login";
+    url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
@@ -53,6 +53,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

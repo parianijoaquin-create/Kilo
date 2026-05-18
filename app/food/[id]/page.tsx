@@ -1,28 +1,70 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { Screen } from "@/components/layout/Screen";
 import { Bar } from "@/components/ui/Bar";
 import { Ring } from "@/components/ui/Ring";
 import { IconChevronLeft, IconPlus } from "@/components/icons";
-import { KILO_DATA } from "@/data/mock";
 import { useSheet } from "@/context/SheetContext";
-import type { MockFood } from "@/types";
+import { createClient } from "@/lib/supabase/client";
 
-const MACRO_ROWS = (food: MockFood) => [
-  { label: "Proteína",  value: food.p, unit: "g", max: 50,  color: "var(--lime)",   code: "P" },
-  { label: "Carbos",    value: food.c, unit: "g", max: 100, color: "var(--blue)",   code: "C" },
-  { label: "Grasas",    value: food.f, unit: "g", max: 40,  color: "var(--orange)", code: "G" },
+interface FoodDetail {
+  id: number;
+  source_food_id: string;
+  canonical_name: string;
+  kcal_100g: number | null;
+  protein_g_100g: number | null;
+  carbs_g_100g: number | null;
+  fat_g_100g: number | null;
+  fiber_g_100g: number | null;
+  default_portion_g: number | null;
+  default_portion_name: string | null;
+}
+
+const MACRO_ROWS = (food: FoodDetail) => [
+  { label: "Proteína", value: Math.round(food.protein_g_100g ?? 0), unit: "g", max: 50,  color: "var(--lime)",   code: "P" },
+  { label: "Carbos",   value: Math.round(food.carbs_g_100g ?? 0),   unit: "g", max: 100, color: "var(--blue)",   code: "C" },
+  { label: "Grasas",   value: Math.round(food.fat_g_100g ?? 0),     unit: "g", max: 40,  color: "var(--orange)", code: "G" },
 ];
 
 export default function FoodDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const { openSheet } = useSheet();
+  const [food, setFood] = useState<FoodDetail | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const food = KILO_DATA.frequentFoods.find((f) => f.id === id);
+  useEffect(() => {
+    async function load() {
+      const supabase = createClient();
+      const fields = "id, source_food_id, canonical_name, kcal_100g, protein_g_100g, carbs_g_100g, fat_g_100g, fiber_g_100g, default_portion_g, default_portion_name";
+
+      // Try source_food_id first (string slug), then numeric id
+      let { data } = await supabase.from("foods").select(fields).eq("source_food_id", id).maybeSingle();
+      if (!data && !isNaN(Number(id))) {
+        const res = await supabase.from("foods").select(fields).eq("id", Number(id)).maybeSingle();
+        data = res.data;
+      }
+
+      setFood(data as FoodDetail | null);
+      setLoading(false);
+    }
+    load();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <AppShell>
+        <Screen scrollKey="food-detail">
+          <div style={{ padding: "48px 20px", textAlign: "center", color: "var(--text-3)" }}>
+            Cargando…
+          </div>
+        </Screen>
+      </AppShell>
+    );
+  }
 
   if (!food) {
     return (
@@ -36,7 +78,11 @@ export default function FoodDetailPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  const kcalPct = Math.min(100, Math.round((food.kcal / 800) * 100));
+  const kcal = Math.round(food.kcal_100g ?? 0);
+  const kcalPct = Math.min(100, Math.round((kcal / 800) * 100));
+  const portionLabel = food.default_portion_name
+    ? `${food.default_portion_name} · ${food.default_portion_g ?? 100}g`
+    : `${food.default_portion_g ?? 100}g`;
 
   return (
     <AppShell>
@@ -90,7 +136,7 @@ export default function FoodDetailPage({ params }: { params: Promise<{ id: strin
               fontSize: 38,
               flexShrink: 0,
             }}>
-              {food.emoji}
+              🥗
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
@@ -101,7 +147,7 @@ export default function FoodDetailPage({ params }: { params: Promise<{ id: strin
                 color: "var(--text-1)",
                 lineHeight: 1.2,
               }}>
-                {food.name}
+                {food.canonical_name}
               </div>
               <div style={{
                 fontSize: 11.5,
@@ -109,7 +155,7 @@ export default function FoodDetailPage({ params }: { params: Promise<{ id: strin
                 marginTop: 4,
                 fontFamily: "var(--font-mono)",
               }}>
-                {food.meta}
+                {portionLabel}
               </div>
             </div>
           </div>
@@ -146,13 +192,13 @@ export default function FoodDetailPage({ params }: { params: Promise<{ id: strin
                 lineHeight: 1,
                 marginTop: 4,
               }}>
-                {food.kcal}
+                {kcal}
               </div>
               <div style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
-                kcal · porción
+                kcal · 100g
               </div>
             </div>
-            <Ring size={80} stroke={8} value={food.kcal} max={800} color="var(--lime)">
+            <Ring size={80} stroke={8} value={kcal} max={800} color="var(--lime)">
               <div style={{
                 fontFamily: "var(--font-display)",
                 fontSize: 13,

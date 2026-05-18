@@ -11,9 +11,10 @@ interface HabitRowProps {
   color: string;
   progress?: number;
   onClick?: () => void;
+  onToggle?: () => void;
 }
 
-export function HabitRow({ Icon, name, sub, streak, done, color, progress, onClick }: HabitRowProps) {
+export function HabitRow({ Icon, name, sub, streak, done, color, progress, onClick, onToggle }: HabitRowProps) {
   return (
     <div
       onClick={onClick}
@@ -75,17 +76,21 @@ export function HabitRow({ Icon, name, sub, streak, done, color, progress, onCli
         {streak}
       </div>
 
-      <div style={{
-        width: 26,
-        height: 26,
-        borderRadius: "50%",
-        background: done ? "var(--lime)" : "transparent",
-        border: done ? "1.5px solid var(--lime)" : "1.5px solid var(--line-2)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-      }}>
+      <div
+        onClick={onToggle ? (e) => { e.stopPropagation(); onToggle(); } : undefined}
+        style={{
+          width: 26,
+          height: 26,
+          borderRadius: "50%",
+          background: done ? "var(--lime)" : "transparent",
+          border: done ? "1.5px solid var(--lime)" : "1.5px solid var(--line-2)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          cursor: onToggle ? "pointer" : "default",
+        }}
+      >
         {done && <IconCheck size={14} color="#0a0d15" strokeWidth={2.5} />}
       </div>
     </div>

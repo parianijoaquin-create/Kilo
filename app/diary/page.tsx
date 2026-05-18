@@ -1,20 +1,32 @@
 "use client";
 
+import { useCallback } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Screen } from "@/components/layout/Screen";
 import { Ring } from "@/components/ui/Ring";
 import { Bar } from "@/components/ui/Bar";
 import { Stat } from "@/components/ui/Stat";
 import { IconSearch, IconPlus, IconDroplet } from "@/components/icons";
-import { KILO_DATA, fmtNum } from "@/data/mock";
-import { useSheet } from "@/context/SheetContext";
-import type { MockMeal, MockMealItem } from "@/types";
+import { KILO_DATA } from "@/data/mock";
+import { useDiary, type DiaryMeal, type DiaryItem } from "@/hooks/useDiary";
+import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
 
+// TODO: conectar metas a useProfile cuando esté disponible
+const GOALS = KILO_DATA.today;
+
+const STANDARD_MEALS = ["morning", "lunch", "snack", "dinner"] as const;
+
+const MEAL_LABELS: Record<string, string> = {
+  morning: "Mañana",
+  lunch: "Mediodía",
+  snack: "Tarde",
+  dinner: "Noche",
+};
 const MEAL_ICONS: Record<string, string> = {
-  sunrise: "🌅",
-  sun: "☀️",
-  sunset: "🌆",
-  moon: "🌙",
+  morning: "🌅",
+  lunch: "☀️",
+  snack: "🌆",
+  dinner: "🌙",
 };
 
 const DATE_STRIP = [
@@ -27,13 +39,11 @@ const DATE_STRIP = [
   { d: "Vi", n: 15, future: true },
 ];
 
-const MACRO_ROWS = (totals: { p: number; c: number; f: number }, t: typeof KILO_DATA.today) => [
-  { l: "Proteína", cur: totals.p, max: t.macros.protein.goal, code: "P", color: "var(--lime)" },
-  { l: "Carbos",   cur: totals.c, max: t.macros.carbs.goal,   code: "C", color: "var(--blue)" },
-  { l: "Grasas",   cur: totals.f, max: t.macros.fat.goal,     code: "G", color: "var(--orange)" },
-];
+function fmtNum(n: number) {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
+}
 
-function FoodLogRow({ item, isFirst, isLast }: { item: MockMealItem; isFirst: boolean; isLast: boolean }) {
+function FoodLogRow({ item, isFirst, isLast }: { item: DiaryItem; isFirst: boolean; isLast: boolean }) {
   return (
     <div
       className="kilo-pressable"
@@ -52,23 +62,23 @@ function FoodLogRow({ item, isFirst, isLast }: { item: MockMealItem; isFirst: bo
         cursor: "pointer",
       }}
     >
-      <span style={{ fontSize: 22, lineHeight: 1 }}>{item.emoji}</span>
+      <span style={{ fontSize: 22, lineHeight: 1 }}>🍽️</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
-          {item.name}
+          {item.item_name_snapshot}
         </div>
         <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-3)", marginTop: 2 }}>
-          {item.portion}
+          {item.grams ? `${item.grams}g` : "–"}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-2)" }}>
-            <span style={{ color: "var(--lime)" }}>P</span> {item.p}g
+            <span style={{ color: "var(--lime)" }}>P</span> {Math.round(item.protein_g ?? 0)}g
           </span>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-2)" }}>
-            <span style={{ color: "var(--blue)" }}>C</span> {item.c}g
+            <span style={{ color: "var(--blue)" }}>C</span> {Math.round(item.carbs_g ?? 0)}g
           </span>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-2)" }}>
-            <span style={{ color: "var(--orange)" }}>G</span> {item.f}g
+            <span style={{ color: "var(--orange)" }}>G</span> {Math.round(item.fat_g ?? 0)}g
           </span>
         </div>
       </div>
@@ -81,7 +91,7 @@ function FoodLogRow({ item, isFirst, isLast }: { item: MockMealItem; isFirst: bo
           letterSpacing: "-0.02em",
           lineHeight: 1,
         }}>
-          {item.kcal}
+          {Math.round(item.calories_kcal ?? 0)}
         </div>
         <div style={{ fontSize: 9, color: "var(--text-3)", marginTop: 2, fontFamily: "var(--font-mono)", letterSpacing: "0.02em" }}>
           kcal
@@ -91,7 +101,18 @@ function FoodLogRow({ item, isFirst, isLast }: { item: MockMealItem; isFirst: bo
   );
 }
 
-function MealSection({ meal, onAdd }: { meal: MockMeal; onAdd: (mealId: string) => void }) {
+function MealSection({
+  mealType,
+  meal,
+  onAdd,
+}: {
+  mealType: string;
+  meal: DiaryMeal | null;
+  onAdd: () => void;
+}) {
+  const items = meal?.meal_items ?? [];
+  const mealKcal = Math.round(items.reduce((s, i) => s + (i.calories_kcal ?? 0), 0));
+
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{
@@ -102,7 +123,7 @@ function MealSection({ meal, onAdd }: { meal: MockMeal; onAdd: (mealId: string) 
         padding: "0 4px",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 16 }}>{MEAL_ICONS[meal.icon] ?? "🍽️"}</span>
+          <span style={{ fontSize: 16 }}>{MEAL_ICONS[mealType] ?? "🍽️"}</span>
           <span style={{
             fontFamily: "var(--font-display)",
             fontSize: 15,
@@ -110,67 +131,69 @@ function MealSection({ meal, onAdd }: { meal: MockMeal; onAdd: (mealId: string) 
             letterSpacing: "-0.02em",
             color: "var(--text-1)",
           }}>
-            {meal.name}
+            {MEAL_LABELS[mealType] ?? mealType}
           </span>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-3)" }}>
-            {meal.time}
-          </span>
+          {meal && (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-3)" }}>
+              {new Date(meal.eaten_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
         </div>
-        {meal.kcal > 0 && (
+        {mealKcal > 0 && (
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)" }}>
-            <span style={{ color: "var(--text-1)", fontWeight: 600 }}>{meal.kcal}</span> kcal
+            <span style={{ color: "var(--text-1)", fontWeight: 600 }}>{mealKcal}</span> kcal
           </div>
         )}
       </div>
 
-      {meal.items.length === 0 ? (
+      {items.length === 0 ? (
         <button
-          onClick={() => onAdd(meal.id)}
+          onClick={onAdd}
           style={{
-          width: "100%",
-          background: "transparent",
-          border: "1.5px dashed var(--line-2)",
-          borderRadius: 14,
-          padding: "14px 16px",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 6,
-          color: "var(--text-3)",
-          fontSize: 12.5,
-          fontFamily: "var(--font-body)",
-        }}>
+            width: "100%",
+            background: "transparent",
+            border: "1.5px dashed var(--line-2)",
+            borderRadius: 14,
+            padding: "14px 16px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            color: "var(--text-3)",
+            fontSize: 12.5,
+            fontFamily: "var(--font-body)",
+          }}>
           <IconPlus size={14} color="var(--text-3)" />
-          Registrá tu {meal.name.toLowerCase()}
+          Registrá tu {(MEAL_LABELS[mealType] ?? mealType).toLowerCase()}
         </button>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          {meal.items.map((item, idx) => (
+          {items.map((item, idx) => (
             <FoodLogRow
               key={item.id}
               item={item}
               isFirst={idx === 0}
-              isLast={idx === meal.items.length - 1}
+              isLast={idx === items.length - 1}
             />
           ))}
           <button
-            onClick={() => onAdd(meal.id)}
+            onClick={onAdd}
             style={{
-            marginTop: 6,
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-            color: "var(--lime)",
-            fontSize: 12,
-            fontWeight: 600,
-            padding: "6px 8px",
-            display: "flex",
-            alignItems: "center",
-            gap: 4,
-            alignSelf: "flex-start",
-            fontFamily: "var(--font-body)",
-          }}>
+              marginTop: 6,
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--lime)",
+              fontSize: 12,
+              fontWeight: 600,
+              padding: "6px 8px",
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              alignSelf: "flex-start",
+              fontFamily: "var(--font-body)",
+            }}>
             <IconPlus size={12} color="var(--lime)" /> Añadir más
           </button>
         </div>
@@ -180,14 +203,39 @@ function MealSection({ meal, onAdd }: { meal: MockMeal; onAdd: (mealId: string) 
 }
 
 export default function DiaryPage() {
-  const D = KILO_DATA;
   const { openSheet } = useSheet();
-  const t = D.today;
-  const totals = { kcal: 0, p: 0, c: 0, f: 0 };
-  D.meals.forEach((m) => {
-    totals.kcal += m.kcal;
-    m.items.forEach((i) => { totals.p += i.p; totals.c += i.c; totals.f += i.f; });
-  });
+  const today = new Date().toISOString().split("T")[0];
+  const { meals, totals, addMealItem } = useDiary(today);
+  const t = GOALS;
+
+  const addFoodToMeal = useCallback(async (food: FoodSearchResult, mealType: string) => {
+    const grams = food.default_portion_g ?? 100;
+    const f = grams / 100;
+    return addMealItem(mealType, {
+      food_id: food.id,
+      barcode_product_id: food.barcode_product_id,
+      item_name_snapshot: food.canonical_name,
+      grams,
+      unit: "g",
+      calories_kcal: Math.round((food.kcal_100g ?? 0) * f),
+      protein_g: Math.round((food.protein_g_100g ?? 0) * f * 10) / 10,
+      carbs_g:   Math.round((food.carbs_g_100g ?? 0) * f * 10) / 10,
+      fat_g:     Math.round((food.fat_g_100g ?? 0) * f * 10) / 10,
+      source_method: food.source_method ?? (food.barcode_product_id ? "barcode" : "manual"),
+      raw_estimation: food.barcode_product_id ? { source: "open_food_facts" } : {},
+    });
+  }, [addMealItem]);
+
+  const kcalTotal    = Math.round(totals.kcal);
+  const proteinTotal = Math.round(totals.protein);
+  const carbsTotal   = Math.round(totals.carbs);
+  const fatTotal     = Math.round(totals.fat);
+
+  const macroRows = [
+    { l: "Proteína", cur: proteinTotal, max: t.macros.protein.goal, code: "P", color: "var(--lime)" },
+    { l: "Carbos",   cur: carbsTotal,   max: t.macros.carbs.goal,   code: "C", color: "var(--blue)" },
+    { l: "Grasas",   cur: fatTotal,     max: t.macros.fat.goal,     code: "G", color: "var(--orange)" },
+  ];
 
   return (
     <AppShell>
@@ -278,7 +326,7 @@ export default function DiaryPage() {
                 TOTAL DEL DÍA
               </div>
               <div style={{ marginTop: 4 }}>
-                <Stat value={fmtNum(totals.kcal)} unit="kcal" size={32} />
+                <Stat value={fmtNum(kcalTotal)} unit="kcal" size={32} />
               </div>
               <div style={{
                 display: "inline-flex",
@@ -292,11 +340,11 @@ export default function DiaryPage() {
                 fontSize: 10,
                 color: "var(--text-2)",
               }}>
-                <span style={{ color: "var(--lime)" }}>−{t.kcalGoal - totals.kcal}</span>
+                <span style={{ color: "var(--lime)" }}>−{t.kcalGoal - kcalTotal}</span>
                 de meta {fmtNum(t.kcalGoal)}
               </div>
             </div>
-            <Ring size={68} stroke={7} value={totals.kcal} max={t.kcalGoal} color="var(--lime)">
+            <Ring size={68} stroke={7} value={kcalTotal} max={t.kcalGoal} color="var(--lime)">
               <div style={{
                 fontFamily: "var(--font-display)",
                 fontSize: 14,
@@ -304,14 +352,14 @@ export default function DiaryPage() {
                 letterSpacing: "-0.03em",
                 color: "var(--text-1)",
               }}>
-                {Math.round((totals.kcal / t.kcalGoal) * 100)}%
+                {Math.round((kcalTotal / t.kcalGoal) * 100)}%
               </div>
             </Ring>
           </div>
 
           {/* Macro bars */}
           <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-            {MACRO_ROWS(totals, t).map((m) => (
+            {macroRows.map((m) => (
               <div key={m.code} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{
                   width: 18,
@@ -342,9 +390,17 @@ export default function DiaryPage() {
 
         {/* Meal sections */}
         <div style={{ padding: "8px 20px 0" }}>
-          {D.meals.map((meal) => (
-            <MealSection key={meal.id} meal={meal} onAdd={openSheet} />
-          ))}
+          {STANDARD_MEALS.map((mealType) => {
+            const meal = meals.find((m) => m.meal_type === mealType) ?? null;
+            return (
+              <MealSection
+                key={mealType}
+                mealType={mealType}
+                meal={meal}
+                onAdd={() => openSheet(mealType, addFoodToMeal)}
+              />
+            );
+          })}
         </div>
 
         {/* Water tracker */}

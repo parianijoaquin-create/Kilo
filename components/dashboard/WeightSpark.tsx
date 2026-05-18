@@ -3,6 +3,9 @@ interface WeightSparkProps {
 }
 
 export function WeightSpark({ data }: WeightSparkProps) {
+  if (data.length < 2) {
+    return <div style={{ height: 24, opacity: 0.2, background: "var(--line-1)", borderRadius: 4 }} />;
+  }
   const min = Math.min(...data) - 0.2;
   const max = Math.max(...data) + 0.2;
   const W = 140;

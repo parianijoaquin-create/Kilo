@@ -45,7 +45,7 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
-    router.push("/auth/login");
+    router.push("/login");
   }, []);
 
   return { ...state, signIn, signUp, signOut };

@@ -1,28 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Sheet } from "@/components/ui/Sheet";
-import { useSheet } from "@/context/SheetContext";
+import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
+import { createClient } from "@/lib/supabase/client";
 import { IconSearch, IconCamera, IconBarcode, IconClose } from "@/components/icons";
-import { KILO_DATA } from "@/data/mock";
-import type { MockFood } from "@/types";
 
 const TABS = ["Frecuentes", "Recientes", "Mis recetas"] as const;
 type Tab = (typeof TABS)[number];
 
+type ScannerMode = "idle" | "camera" | "manual";
+type ScannerStatus = "idle" | "requesting" | "scanning" | "lookup" | "success" | "error";
+
+interface DetectedBarcode {
+  rawValue: string;
+}
+
+interface BarcodeDetectorConstructor {
+  new (options?: { formats?: string[] }): {
+    detect(source: CanvasImageSource): Promise<DetectedBarcode[]>;
+  };
+  getSupportedFormats?: () => Promise<string[]>;
+}
+
+type WindowWithBarcodeDetector = Window & {
+  BarcodeDetector?: BarcodeDetectorConstructor;
+};
+
 function MacroBadge({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <span style={{
-      fontFamily: "var(--font-mono)",
-      fontSize: 9.5,
-      color: "var(--text-2)",
-    }}>
+    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--text-2)" }}>
       <span style={{ color, fontWeight: 700 }}>{label}</span> {value}g
     </span>
   );
 }
 
-function FoodRow({ food, onAdd }: { food: MockFood; onAdd: (food: MockFood) => void }) {
+function FoodRow({ food, onAdd }: { food: FoodSearchResult; onAdd: (food: FoodSearchResult) => void }) {
+  const portion = food.default_portion_name
+    ? `${food.default_portion_name} · ${food.default_portion_g ?? 100}g`
+    : `${food.default_portion_g ?? 100}g · Genérico`;
+
   return (
     <button
       className="kilo-pressable"
@@ -40,7 +57,19 @@ function FoodRow({ food, onAdd }: { food: MockFood; onAdd: (food: MockFood) => v
         textAlign: "left",
       }}
     >
-      <span style={{ fontSize: 26, lineHeight: 1, flexShrink: 0 }}>{food.emoji}</span>
+      <span style={{
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        background: "var(--bg-2)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 18,
+        flexShrink: 0,
+      }}>
+        🥗
+      </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontSize: 13.5,
@@ -51,15 +80,15 @@ function FoodRow({ food, onAdd }: { food: MockFood; onAdd: (food: MockFood) => v
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
         }}>
-          {food.name}
+          {food.canonical_name}
         </div>
         <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2, fontFamily: "var(--font-mono)" }}>
-          {food.meta}
+          {portion}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-          <MacroBadge label="P" value={food.p} color="var(--lime)" />
-          <MacroBadge label="C" value={food.c} color="var(--blue)" />
-          <MacroBadge label="G" value={food.f} color="var(--orange)" />
+          <MacroBadge label="P" value={Math.round(food.protein_g_100g ?? 0)} color="var(--lime)" />
+          <MacroBadge label="C" value={Math.round(food.carbs_g_100g ?? 0)} color="var(--blue)" />
+          <MacroBadge label="G" value={Math.round(food.fat_g_100g ?? 0)} color="var(--orange)" />
         </div>
       </div>
       <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -71,7 +100,7 @@ function FoodRow({ food, onAdd }: { food: MockFood; onAdd: (food: MockFood) => v
           letterSpacing: "-0.02em",
           lineHeight: 1,
         }}>
-          {food.kcal}
+          {Math.round(food.kcal_100g ?? 0)}
         </div>
         <div style={{ fontSize: 9, color: "var(--text-3)", marginTop: 2, fontFamily: "var(--font-mono)" }}>
           kcal
@@ -82,16 +111,197 @@ function FoodRow({ food, onAdd }: { food: MockFood; onAdd: (food: MockFood) => v
 }
 
 export function AddFoodSheet() {
-  const { isOpen, mealId, closeSheet } = useSheet();
+  const { isOpen, mealId, addItemFn, closeSheet } = useSheet();
   const [activeTab, setActiveTab] = useState<Tab>("Frecuentes");
   const [query, setQuery] = useState("");
+  const [foods, setFoods] = useState<FoodSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [scannerMode, setScannerMode] = useState<ScannerMode>("idle");
+  const [scannerStatus, setScannerStatus] = useState<ScannerStatus>("idle");
+  const [scannerMessage, setScannerMessage] = useState<string | null>(null);
+  const [manualBarcode, setManualBarcode] = useState("");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const scanTimerRef = useRef<number | null>(null);
+  const detectorRef = useRef<InstanceType<BarcodeDetectorConstructor> | null>(null);
+  const scanInFlightRef = useRef(false);
 
-  const foods = KILO_DATA.frequentFoods.filter((f) =>
-    !query || f.name.toLowerCase().includes(query.toLowerCase())
-  );
+  const fetchFoods = useCallback(async (q: string) => {
+    setLoading(true);
+    setError(null);
+    const supabase = createClient();
+    const req = supabase
+      .from("foods")
+      .select("id, source_food_id, canonical_name, kcal_100g, protein_g_100g, carbs_g_100g, fat_g_100g, fiber_g_100g, default_portion_g, default_portion_name");
 
-  function handleAdd(food: MockFood) {
-    console.log("Add food", food.id, "to meal", mealId);
+    const { data, error: err } = await (q.length >= 2
+      ? req.ilike("canonical_name", `%${q}%`).limit(30)
+      : req.order("canonical_name").limit(20));
+
+    setFoods((data as FoodSearchResult[]) ?? []);
+    setError(err?.message ?? null);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const t = setTimeout(() => fetchFoods(query), query.length >= 2 ? 200 : 0);
+    return () => clearTimeout(t);
+  }, [query, isOpen, fetchFoods]);
+
+  // Reset state when sheet opens
+  useEffect(() => {
+    if (isOpen) {
+      setQuery("");
+      setError(null);
+      setAdding(false);
+      setScannerMode("idle");
+      setScannerStatus("idle");
+      setScannerMessage(null);
+      setManualBarcode("");
+    }
+  }, [isOpen]);
+
+  const stopScanner = useCallback(() => {
+    if (scanTimerRef.current != null) {
+      window.clearTimeout(scanTimerRef.current);
+      scanTimerRef.current = null;
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    scanInFlightRef.current = false;
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || scannerMode !== "camera") stopScanner();
+    return () => stopScanner();
+  }, [isOpen, scannerMode, stopScanner]);
+
+  const lookupBarcode = useCallback(async (barcode: string) => {
+    const cleanBarcode = barcode.replace(/\D/g, "");
+
+    if (!addItemFn || !mealId || adding || !cleanBarcode) return;
+    if (!/^\d{8,14}$/.test(cleanBarcode)) {
+      setScannerStatus("error");
+      setScannerMessage("El codigo debe tener entre 8 y 14 numeros.");
+      return;
+    }
+
+    setAdding(true);
+    setScannerStatus("lookup");
+    setScannerMessage(`Buscando ${cleanBarcode}...`);
+
+    try {
+      const res = await fetch(`/api/foods/barcode?barcode=${cleanBarcode}`);
+      const payload = await res.json();
+
+      if (!res.ok) {
+        throw new Error(payload?.error ?? "No pudimos encontrar ese producto.");
+      }
+
+      const result = await addItemFn(payload.food as FoodSearchResult, mealId);
+      if (result.error) throw new Error(result.error);
+
+      stopScanner();
+      setScannerStatus("success");
+      setScannerMessage("Producto agregado al diario.");
+      closeSheet();
+    } catch (err) {
+      scanInFlightRef.current = false;
+      setScannerStatus("error");
+      setScannerMessage(err instanceof Error ? err.message : "No pudimos leer el codigo.");
+    } finally {
+      setAdding(false);
+    }
+  }, [addItemFn, adding, closeSheet, mealId, stopScanner]);
+
+  const startBarcodeScanner = useCallback(async () => {
+    setScannerMode("camera");
+    setScannerStatus("requesting");
+    setScannerMessage("Permiti la camara para escanear el codigo.");
+
+    try {
+      const BarcodeDetector = (window as WindowWithBarcodeDetector).BarcodeDetector;
+
+      if (!BarcodeDetector || !navigator.mediaDevices?.getUserMedia) {
+        setScannerMode("manual");
+        setScannerStatus("error");
+        setScannerMessage("Tu navegador no soporta lectura automatica. Ingresalo manualmente.");
+        return;
+      }
+
+      detectorRef.current = new BarcodeDetector({
+        formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "itf"],
+      });
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+      streamRef.current = stream;
+      setScannerStatus("scanning");
+      setScannerMessage("Apunta al codigo y mantenelo dentro del recuadro.");
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+
+      const scan = async () => {
+        if (!videoRef.current || !detectorRef.current || scanInFlightRef.current) {
+          scanTimerRef.current = window.setTimeout(scan, 450);
+          return;
+        }
+
+        try {
+          const barcodes = await detectorRef.current.detect(videoRef.current);
+          const rawValue = barcodes[0]?.rawValue?.replace(/\D/g, "");
+
+          if (rawValue) {
+            scanInFlightRef.current = true;
+            void lookupBarcode(rawValue);
+            return;
+          }
+        } catch {
+          setScannerMode("manual");
+          setScannerStatus("error");
+          setScannerMessage("No pudimos leer con la camara. Probalo manualmente.");
+          stopScanner();
+          return;
+        }
+
+        scanTimerRef.current = window.setTimeout(scan, 450);
+      };
+
+      scanTimerRef.current = window.setTimeout(scan, 300);
+    } catch (err) {
+      stopScanner();
+      setScannerMode("manual");
+      setScannerStatus("error");
+      setScannerMessage(
+        err instanceof DOMException && err.name === "NotAllowedError"
+          ? "La camara esta bloqueada. Habilitala o ingresalo manualmente."
+          : "No pudimos abrir la camara. Ingresalo manualmente."
+      );
+    }
+  }, [lookupBarcode, stopScanner]);
+
+  async function handleAdd(food: FoodSearchResult) {
+    if (!addItemFn || !mealId || adding) return;
+    setAdding(true);
+    await addItemFn(food, mealId);
+    setAdding(false);
     closeSheet();
   }
 
@@ -180,6 +390,16 @@ export function AddFoodSheet() {
           <button
             key={label}
             className="kilo-pressable"
+            onClick={() => {
+              if (Icon === IconBarcode) {
+                void startBarcodeScanner();
+                return;
+              }
+              stopScanner();
+              setScannerMode("idle");
+              photoInputRef.current?.click();
+            }}
+            disabled={adding || scannerStatus === "requesting" || scannerStatus === "lookup"}
             style={{
               flex: 1,
               display: "flex",
@@ -202,6 +422,138 @@ export function AddFoodSheet() {
           </button>
         ))}
       </div>
+
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          setScannerStatus("success");
+          setScannerMessage("Foto recibida. El calculo automatico con IA va en el siguiente paso.");
+          e.currentTarget.value = "";
+        }}
+      />
+
+      {(scannerMode !== "idle" || scannerMessage) && (
+        <div style={{ padding: "10px 20px 0", flexShrink: 0 }}>
+          <div style={{
+            background: "var(--bg-2)",
+            border: "1px solid var(--line-2)",
+            borderRadius: 14,
+            overflow: "hidden",
+          }}>
+            {scannerMode === "camera" && (
+              <div style={{ position: "relative", aspectRatio: "16 / 9", background: "#050814" }}>
+                <video
+                  ref={videoRef}
+                  muted
+                  playsInline
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                />
+                <div style={{
+                  position: "absolute",
+                  left: "13%",
+                  right: "13%",
+                  top: "32%",
+                  bottom: "32%",
+                  border: "2px solid var(--lime)",
+                  borderRadius: 12,
+                  boxShadow: "0 0 0 999px rgba(5,8,20,0.48)",
+                }} />
+              </div>
+            )}
+
+            {scannerMode === "manual" && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void lookupBarcode(manualBarcode);
+                }}
+                style={{ display: "flex", gap: 8, padding: 10 }}
+              >
+                <input
+                  value={manualBarcode}
+                  onChange={(e) => setManualBarcode(e.target.value.replace(/\D/g, ""))}
+                  inputMode="numeric"
+                  autoFocus
+                  placeholder="EAN / UPC"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    height: 38,
+                    borderRadius: 10,
+                    border: "1px solid var(--line-2)",
+                    background: "var(--bg-1)",
+                    color: "var(--text-1)",
+                    padding: "0 12px",
+                    fontFamily: "var(--font-mono)",
+                    outline: "none",
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={adding || manualBarcode.length < 8}
+                  style={{
+                    height: 38,
+                    borderRadius: 10,
+                    border: "none",
+                    background: "var(--lime)",
+                    color: "#0a0d15",
+                    padding: "0 12px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: manualBarcode.length >= 8 ? "pointer" : "default",
+                    opacity: manualBarcode.length >= 8 ? 1 : 0.55,
+                  }}
+                >
+                  Cargar
+                </button>
+              </form>
+            )}
+
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+              padding: scannerMode === "camera" ? "10px 12px" : "0 12px 10px",
+            }}>
+              <div style={{
+                color: scannerStatus === "error" ? "var(--orange)" : "var(--text-2)",
+                fontSize: 11.5,
+                lineHeight: 1.35,
+              }}>
+                {scannerMessage}
+              </div>
+              {scannerMode === "camera" && (
+                <button
+                  onClick={() => {
+                    stopScanner();
+                    setScannerMode("manual");
+                    setScannerStatus("idle");
+                    setScannerMessage("Ingresalo manualmente si la camara no lo toma.");
+                  }}
+                  style={{
+                    flexShrink: 0,
+                    background: "none",
+                    border: "none",
+                    color: "var(--lime)",
+                    cursor: "pointer",
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                  }}
+                >
+                  Manual
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{
@@ -236,7 +588,32 @@ export function AddFoodSheet() {
 
       {/* Food list */}
       <div style={{ flex: 1, overflowY: "auto", paddingBottom: 24 }}>
-        {foods.length > 0 ? (
+        {loading ? (
+          <div style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "48px 24px",
+            gap: 8,
+          }}>
+            <div style={{ fontSize: 13.5, color: "var(--text-3)" }}>Cargando…</div>
+          </div>
+        ) : error ? (
+          <div style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "48px 24px",
+            gap: 8,
+          }}>
+            <div style={{ fontSize: 36 }}>⚠️</div>
+            <div style={{ fontSize: 13.5, color: "var(--text-3)", textAlign: "center" }}>
+              Error al cargar alimentos
+            </div>
+          </div>
+        ) : foods.length > 0 ? (
           foods.map((food) => (
             <FoodRow key={food.id} food={food} onAdd={handleAdd} />
           ))
@@ -251,7 +628,9 @@ export function AddFoodSheet() {
           }}>
             <div style={{ fontSize: 36 }}>🔍</div>
             <div style={{ fontSize: 13.5, color: "var(--text-3)", textAlign: "center" }}>
-              No encontramos &ldquo;{query}&rdquo;
+              {query.length >= 2
+                ? `No encontramos "${query}"`
+                : "No hay alimentos disponibles"}
             </div>
             <div style={{ fontSize: 12, color: "var(--text-3)", opacity: 0.6 }}>
               Probá otro nombre o escanéalo

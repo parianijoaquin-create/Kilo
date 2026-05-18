@@ -1,0 +1,101 @@
+﻿id,nombre_es,categoria,tipo,porcion_base,calorias_kcal_per_100,protein_g_per_100,carbs_g_per_100,fat_g_per_100,fiber_g_per_100,sugar_g_per_100,sodium_mg_per_100,source,verified
+banana,Banana,fruta,generico,100 g,92,1.2,20.4,0.2,2.6,12.2,1,SARA2/seed,True
+manzana_con_piel,Manzana con piel,fruta,generico,100 g,48,0.3,11.4,0.2,2.4,10.4,1,SARA2/seed,True
+naranja,Naranja,fruta,generico,100 g,43,0.9,9.3,0.1,2.4,9.3,0,SARA2/seed,True
+mandarina,Mandarina,fruta,generico,100 g,52,0.8,11.5,0.3,1.8,10.6,2,SARA2/seed,True
+pera,Pera,fruta,generico,100 g,55,0.7,12.1,0.4,3.1,9.8,2,SARA2/seed,True
+frutilla,Frutilla,fruta,generico,100 g,31,0.8,5.7,0.6,2.0,4.9,2,SARA2/seed,True
+durazno,Durazno,fruta,generico,100 g,45,0.5,10.5,0.1,1.5,8.4,3,SARA2/seed,True
+kiwi,Kiwi,fruta,generico,100 g,56,1.1,11.7,0.5,3.0,9.0,3,SARA2/seed,True
+anana,Ananá,fruta,generico,100 g,50,0.4,11.7,0.2,1.4,9.9,2,SARA2/seed,True
+palta,Palta,fruta,generico,100 g,190,1.9,1.8,19.5,6.7,0.7,7,SARA2/seed,True
+tomate,Tomate,verdura,generico,100 g,17,1.0,2.9,0.2,1.2,2.6,5,SARA2/seed,True
+lechuga,Lechuga,verdura,generico,100 g,12,1.2,1.4,0.2,1.4,1.2,13,SARA2/seed,True
+cebolla,Cebolla,verdura,generico,100 g,36,1.1,7.6,0.1,1.7,4.2,4,SARA2/seed,True
+zanahoria,Zanahoria,verdura,generico,100 g,43,1.1,9.2,0.2,2.8,4.7,22,SARA2/seed,True
+zapallo,Zapallo,verdura,generico,100 g,28,1.0,5.7,0.1,1.1,2.8,1,SARA2/seed,True
+papa_hervida,Papa hervida,verdura,generico,100 g,86,1.9,19.8,0.1,1.8,0.8,5,SARA2/seed,True
+batata_hervida,Batata hervida,verdura,generico,100 g,76,1.4,17.7,0.1,2.5,5.7,27,SARA2/seed,True
+brocoli_hervido,Brócoli hervido,verdura,generico,100 g,35,2.4,4.4,0.4,3.3,1.4,41,SARA2/seed,True
+espinaca,Espinaca,verdura,generico,100 g,23,2.9,1.6,0.4,2.2,0.4,79,SARA2/seed,True
+morrón_rojo,Morrón rojo,verdura,generico,100 g,31,1.0,6.0,0.3,2.1,4.2,4,SARA2/seed,True
+avena_arrollada_cruda,Avena arrollada cruda,cereal,generico,100 g,357,15.6,56.9,7.5,10.4,0.7,0,SARA2/seed,True
+arroz_blanco_hervido,Arroz blanco hervido,cereal,generico,100 g,126,2.4,28.6,0.2,0.4,0.1,1,SARA2/seed,True
+arroz_integral_hervido,Arroz integral hervido,cereal,generico,100 g,112,2.3,23.5,0.8,1.8,0.4,5,SARA2/seed,True
+fideos_hervidos,Fideos hervidos,cereal,generico,100 g,151,5.2,30.9,0.9,1.8,0.6,1,SARA2/seed,True
+pan_frances,Pan francés,panificado,generico,100 g,270,8.4,56.4,1.6,2.7,2.0,550,SARA2/seed,True
+pan_integral,Pan integral,panificado,generico,100 g,250,9.0,45.0,3.5,7.0,4.0,520,SARA2/seed,True
+galletitas_de_agua,Galletitas de agua,panificado,producto_base,100 g,420,10.0,72.0,10.0,3.0,5.0,700,SARA2/seed,False
+galletitas_dulces,Galletitas dulces simples,panificado,producto_base,100 g,450,6.0,70.0,16.0,2.5,25.0,350,SARA2/seed,False
+granola,Granola,cereal,producto_base,100 g,430,10.0,64.0,14.0,7.0,20.0,120,seed_estimate,False
+harina_de_trigo,Harina de trigo,cereal,generico,100 g,364,10.3,76.3,1.0,2.7,0.3,2,SARA2/seed,True
+lentejas_hervidas,Lentejas hervidas,legumbre,generico,100 g,116,9.0,20.1,0.4,7.9,1.8,2,SARA2/seed,True
+garbanzos_hervidos,Garbanzos hervidos,legumbre,generico,100 g,164,8.9,27.4,2.6,7.6,4.8,7,SARA2/seed,True
+porotos_hervidos,Porotos hervidos,legumbre,generico,100 g,127,8.7,22.8,0.5,6.4,0.3,1,SARA2/seed,True
+arvejas_hervidas,Arvejas hervidas,legumbre,generico,100 g,84,5.4,15.6,0.4,5.5,5.9,3,SARA2/seed,True
+soja_hervida,Soja hervida,legumbre,generico,100 g,173,16.6,9.9,9.0,6.0,3.0,1,SARA2/seed,False
+leche_entera_fluida_fortificada,Leche entera fluida fortificada,lacteo,generico,100 g,57,3.2,4.6,2.9,0.0,4.6,57,SARA2/seed,True
+leche_descremada,Leche descremada,lacteo,generico,100 g,35,3.4,5.0,0.1,0.0,5.0,52,SARA2/seed,True
+yogur_natural_entero,Yogur natural entero,lacteo,generico,100 g,61,3.5,4.7,3.3,0.0,4.7,46,SARA2/seed,True
+yogur_descremado,Yogur descremado,lacteo,generico,100 g,45,4.0,6.0,0.2,0.0,6.0,55,SARA2/seed,True
+yogur_proteico,Yogur proteico,lacteo,producto_base,100 g,75,10.0,6.0,1.0,0.0,4.0,60,seed_estimate,False
+queso_cremoso,Queso cremoso,queso,generico,100 g,290,18.0,2.0,23.0,0.0,1.0,650,SARA2/seed,False
+queso_port_salut,Queso port salut,queso,generico,100 g,280,20.0,2.0,21.0,0.0,1.0,620,SARA2/seed,False
+queso_muzzarella,Queso muzzarella,queso,generico,100 g,300,23.6,2.2,22.0,0.0,1.0,630,SARA2/seed,True
+queso_rallado,Queso rallado tipo parmesano,queso,generico,100 g,430,38.0,4.0,29.0,0.0,0.9,1500,SARA2/seed,False
+ricota,Ricota,lacteo,generico,100 g,174,11.3,3.0,13.0,0.0,0.3,84,SARA2/seed,False
+huevo_entero,Huevo entero,huevo,generico,100 g,156,12.0,0.4,11.8,0.0,0.4,135,SARA2/seed,True
+clara_de_huevo,Clara de huevo,huevo,generico,100 g,52,10.9,0.7,0.2,0.0,0.7,166,SARA2/seed,True
+yema_de_huevo,Yema de huevo,huevo,generico,100 g,322,15.9,3.6,26.5,0.0,0.6,48,SARA2/seed,False
+pechuga_de_pollo,Pechuga de pollo,proteina animal,generico,100 g,114,22.5,0.0,2.6,0.0,0.0,45,SARA2/seed,True
+pollo_sin_piel_parrilla,Pollo sin piel a la parrilla,proteina animal,generico,100 g,165,25.0,0.0,7.0,0.0,0.0,70,SARA2/seed,True
+carne_vacuna_magra_parrilla,Carne vacuna magra a la parrilla,proteina animal,generico,100 g,198,29.5,0.0,8.9,0.0,0.0,63,SARA2/seed,True
+carne_vacuna_semigrasa_parrilla,Carne vacuna semigrasa a la parrilla,proteina animal,generico,100 g,225,28.2,0.0,12.5,0.0,0.0,62,SARA2/seed,True
+carne_picada_comun,Carne picada común,proteina animal,generico,100 g,254,17.2,0.0,20.0,0.0,0.0,72,SARA2/seed,False
+jamon_cocido,Jamón cocido,fiambre,producto_base,100 g,145,20.0,1.5,6.5,0.0,1.0,1100,SARA2/seed,False
+chorizo_parrilla,Chorizo a la parrilla,fiambre,generico,100 g,455,18.0,1.0,42.0,0.0,0.2,950,SARA2/seed,False
+atun_en_agua,Atún al natural,pescado,producto_base,100 g,116,25.5,0.0,1.0,0.0,0.0,300,SARA2/seed,False
+atun_en_aceite,Atún en aceite,pescado,producto_base,100 g,198,29.1,0.0,8.2,0.0,0.0,360,SARA2/seed,True
+merluza_filet,Filet de merluza,pescado,generico,100 g,85,18.0,0.0,1.5,0.0,0.0,90,SARA2/seed,False
+salmon,Salmón,pescado,generico,100 g,208,20.4,0.0,13.4,0.0,0.0,59,seed_estimate,False
+sardinas_en_aceite,Sardinas en aceite,pescado,producto_base,100 g,208,24.6,0.0,11.5,0.0,0.0,505,SARA2/seed,False
+aceite_de_oliva,Aceite de oliva,aceite,generico,100 g,900,0.0,0.0,100.0,0.0,0.0,0,SARA2/seed,True
+aceite_de_girasol,Aceite de girasol,aceite,generico,100 g,900,0.0,0.0,100.0,0.0,0.0,0,SARA2/seed,True
+manteca,Manteca,grasa,generico,100 g,717,0.9,0.1,81.1,0.0,0.1,11,SARA2/seed,False
+mani_tostado_sin_sal,Maní tostado sin sal,fruto seco,generico,100 g,596,24.4,21.5,49.7,8.4,4.2,18,SARA2/seed,True
+mantequilla_de_mani,Mantequilla de maní,fruto seco,producto_base,100 g,607,21.9,22.3,51.0,6.0,9.0,450,SARA2/seed,True
+almendra,Almendra,fruto seco,generico,100 g,570,21.0,21.6,49.9,12.5,4.4,1,SARA2/seed,True
+nuez,Nuez,fruto seco,generico,100 g,690,14.0,13.7,68.0,6.7,2.6,2,SARA2/seed,True
+castanas_de_caju,Castañas de cajú,fruto seco,generico,100 g,553,18.2,30.2,43.9,3.3,5.9,12,seed_estimate,False
+semilla_de_chia,Semilla de chía,semilla,generico,100 g,486,16.5,42.1,30.7,34.4,0.0,16,seed_estimate,False
+semilla_de_zapallo,Semilla de zapallo,semilla,generico,100 g,581,30.2,10.7,49.0,6.0,1.4,7,SARA2/seed,True
+milanesa_de_carne_vacuna,Milanesa de carne vacuna,comida tipica,comida_argentina,100 g,160,18.9,14.5,3.0,1.0,1.4,212,SARA2/seed,True
+milanesa_de_pollo,Milanesa de pollo,comida tipica,comida_argentina,100 g,172,19.8,14.5,3.9,1.0,1.4,199,SARA2/seed,True
+asado,Asado,comida tipica,comida_argentina,100 g,240,26.1,0.0,15.1,0.0,0.0,51,SARA2/proxy,False
+choripan,Choripán,comida tipica,comida_argentina,100 g,350,14.6,25.9,20.9,1.1,0.1,651,recipe_estimate,False
+empanada_de_carne,Empanada de carne,comida tipica,comida_argentina,100 g,253,15.0,22.2,11.6,0.9,0.5,284,recipe_estimate,False
+empanada_de_pollo,Empanada de pollo,comida tipica,comida_argentina,100 g,220,13.2,22.4,8.7,1.0,0.7,283,recipe_estimate,False
+locro,Locro,comida tipica,comida_argentina,100 g,163,10.9,10.8,8.5,2.3,1.4,175,recipe_estimate,False
+pastel_de_papa,Pastel de papa,comida tipica,comida_argentina,100 g,161,9.5,10.8,8.8,1.2,0.9,22,recipe_estimate,False
+tarta_jamon_y_queso,Tarta de jamón y queso,comida tipica,comida_argentina,100 g,285,12.0,22.0,17.0,1.0,1.5,520,recipe_estimate,False
+tarta_de_verdura,Tarta de verdura,comida tipica,comida_argentina,100 g,210,8.0,18.0,11.0,2.0,2.0,380,recipe_estimate,False
+guiso_de_lentejas,Guiso de lentejas,comida tipica,comida_argentina,100 g,142,8.5,17.0,4.0,5.0,2.0,220,recipe_estimate,False
+tortilla_de_papa,Tortilla de papa,comida tipica,comida_argentina,100 g,185,6.5,17.0,10.0,1.4,1.0,210,recipe_estimate,False
+medialuna,Medialuna,panificado dulce,comida_argentina,100 g,395,8.2,43.2,21.0,2.6,11.3,384,SARA2/proxy,False
+alfajor_de_dulce_de_leche,Alfajor de dulce de leche,dulce,producto_base,100 g,420,6.0,65.0,15.0,2.0,45.0,180,SARA2/seed,True
+dulce_de_leche,Dulce de leche,dulce,producto_base,100 g,315,7.0,55.0,7.0,0.0,50.0,130,SARA2/seed,False
+miel,Miel,dulce,generico,100 g,304,0.3,82.4,0.0,0.2,82.1,4,SARA2/seed,False
+azucar,Azúcar,dulce,generico,100 g,387,0.0,100.0,0.0,0.0,100.0,1,SARA2/seed,True
+chocolate_con_leche,Chocolate con leche,dulce,producto_base,100 g,535,7.7,59.4,29.7,3.4,51.0,79,seed_estimate,False
+papas_fritas_copetin,Papas fritas de copetín,snack,producto_base,100 g,534,6.5,53.0,34.0,4.0,0.5,520,SARA2/seed,True
+bizcochitos_de_grasa,Bizcochitos de grasa envasados,snack,producto_base,100 g,499,8.0,60.0,25.0,2.0,4.0,950,SARA2/seed,True
+gaseosa_comun,Gaseosa común,bebida,producto_base,100 ml,42,0.0,10.6,0.0,0.0,10.6,5,SARA2/seed,False
+gaseosa_light,Gaseosa light/sin azúcar,bebida,producto_base,100 ml,1,0.0,0.1,0.0,0.0,0.0,15,SARA2/seed,False
+jugo_de_naranja,Jugo de naranja,bebida,generico,100 ml,45,0.7,10.4,0.2,0.2,8.4,1,SARA2/seed,False
+cerveza,Cerveza,bebida,producto_base,100 ml,43,0.5,3.6,0.0,0.0,0.0,4,SARA2/seed,False
+vino_tinto,Vino tinto,bebida,producto_base,100 ml,85,0.1,2.6,0.0,0.0,0.6,4,SARA2/seed,False
+mate_cocido_sin_azucar,Mate cocido sin azúcar,bebida,generico,100 ml,1,0.0,0.1,0.0,0.0,0.0,1,seed_estimate,False
+proteina_whey_polvo,Proteína whey en polvo,suplemento,suplemento,100 g,390,78.0,8.0,6.0,0.0,5.0,350,label_average_estimate,False
+creatina_monohidratada,Creatina monohidratada,suplemento,suplemento,100 g,0,0.0,0.0,0.0,0.0,0.0,0,supplement_standard,False
+barra_proteica_promedio,Barra proteica promedio,suplemento,producto_base,100 g,360,30.0,35.0,12.0,8.0,10.0,280,label_average_estimate,False
+bebida_isotonica,Bebida isotónica,bebida,producto_base,100 ml,24,0.0,6.0,0.0,0.0,6.0,45,label_average_estimate,False

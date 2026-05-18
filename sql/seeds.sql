@@ -5,7 +5,8 @@ insert into public.food_sources (code, name, source_type, license_name, priority
   ('sifega', 'SIFeGA/ANMAT',         'official',  'Validar licencia',  20),
   ('off',    'Open Food Facts',      'community', 'ODbL',              30),
   ('usda',   'USDA FoodData Central','official',  'CC0 1.0',           40),
-  ('manual', 'Manual',               'manual',    NULL,               100);
+  ('manual', 'Manual',               'manual',    NULL,               100)
+on conflict (code) do nothing;
 
 -- ─── Food categories ──────────────────────────────────────────────────────────
 
@@ -18,7 +19,8 @@ insert into public.food_categories (slug, name, sort_order) values
   ('verduras',           'Verduras',             6),
   ('legumbres',          'Legumbres',            7),
   ('suplementos',        'Suplementos',          8),
-  ('comidas-argentinas', 'Comidas argentinas',   9);
+  ('comidas-argentinas', 'Comidas argentinas',   9)
+on conflict (slug) do nothing;
 
 -- ─── Alimentos genéricos argentinos ──────────────────────────────────────────
 
@@ -129,4 +131,5 @@ values
   ((select id from public.food_categories where slug='comidas-argentinas'),
    (select id from public.food_sources where code='ennys2'), 'ennys2-mate-amargo',
    'Mate amargo (infusión)', true, false, 'draft',
-   3, 0.2, 0.3, 0.0, 0.0, 2, '1 cebadura', 50);
+   3, 0.2, 0.3, 0.0, 0.0, 2, '1 cebadura', 50)
+on conflict (source_id, source_food_id) do nothing;

@@ -142,7 +142,7 @@ export default function RegisterPage() {
         {/* Footer link */}
         <p style={{ textAlign: "center", marginTop: 20, fontSize: 13, color: "var(--text-3)" }}>
           ¿Ya tenés cuenta?{" "}
-          <Link href="/auth/login" style={{ color: "var(--lime)", fontWeight: 600, textDecoration: "none" }}>
+          <Link href="/login" style={{ color: "var(--lime)", fontWeight: 600, textDecoration: "none" }}>
             Ingresar
           </Link>
         </p>
