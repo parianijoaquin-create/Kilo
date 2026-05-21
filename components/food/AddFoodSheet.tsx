@@ -5,27 +5,15 @@ import { Sheet } from "@/components/ui/Sheet";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
 import { createClient } from "@/lib/supabase/client";
 import { IconSearch, IconCamera, IconBarcode, IconClose } from "@/components/icons";
+import { BrowserMultiFormatReader } from "@zxing/browser";
+import { BarcodeFormat, DecodeHintType } from "@zxing/library";
+import type { IScannerControls } from "@zxing/browser";
 
 const TABS = ["Frecuentes", "Recientes", "Mis recetas"] as const;
 type Tab = (typeof TABS)[number];
 
 type ScannerMode = "idle" | "camera" | "manual";
 type ScannerStatus = "idle" | "requesting" | "scanning" | "lookup" | "success" | "error";
-
-interface DetectedBarcode {
-  rawValue: string;
-}
-
-interface BarcodeDetectorConstructor {
-  new (options?: { formats?: string[] }): {
-    detect(source: CanvasImageSource): Promise<DetectedBarcode[]>;
-  };
-  getSupportedFormats?: () => Promise<string[]>;
-}
-
-type WindowWithBarcodeDetector = Window & {
-  BarcodeDetector?: BarcodeDetectorConstructor;
-};
 
 function MacroBadge({ label, value, color }: { label: string; value: number; color: string }) {
   return (
@@ -124,13 +112,14 @@ export function AddFoodSheet() {
   const [manualBarcode, setManualBarcode] = useState("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const scanTimerRef = useRef<number | null>(null);
-  const detectorRef = useRef<InstanceType<BarcodeDetectorConstructor> | null>(null);
+  const controlsRef = useRef<IScannerControls | null>(null);
   const scanInFlightRef = useRef(false);
   const supabase = useMemo(() => createClient(), []);
 
+  const fetchSeqRef = useRef(0);
+
   const fetchFoods = useCallback(async (q: string) => {
+    const seq = ++fetchSeqRef.current;
     setLoading(true);
     setError(null);
     const req = supabase
@@ -140,6 +129,9 @@ export function AddFoodSheet() {
     const { data, error: err } = await (q.length >= 2
       ? req.ilike("canonical_name", `%${q}%`).limit(30)
       : req.order("canonical_name").limit(20));
+
+    // Discard if a newer fetch was started while we were waiting
+    if (seq !== fetchSeqRef.current) return;
 
     setFoods((data as FoodSearchResult[]) ?? []);
     setError(err?.message ?? null);
@@ -166,12 +158,8 @@ export function AddFoodSheet() {
   }, [isOpen]);
 
   const stopScanner = useCallback(() => {
-    if (scanTimerRef.current != null) {
-      window.clearTimeout(scanTimerRef.current);
-      scanTimerRef.current = null;
-    }
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
+    controlsRef.current?.stop();
+    controlsRef.current = null;
     scanInFlightRef.current = false;
     if (videoRef.current) {
       videoRef.current.srcObject = null;
@@ -224,74 +212,58 @@ export function AddFoodSheet() {
   const startBarcodeScanner = useCallback(async () => {
     setScannerMode("camera");
     setScannerStatus("requesting");
-    setScannerMessage("Permiti la camara para escanear el codigo.");
+    setScannerMessage("Permiti el acceso a la camara.");
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setScannerMode("manual");
+      setScannerStatus("error");
+      setScannerMessage("Tu navegador no soporta camara. Ingresalo manualmente.");
+      return;
+    }
+
+    const hints = new Map<DecodeHintType, unknown>();
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A,
+      BarcodeFormat.UPC_E,
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.ITF,
+    ]);
+    hints.set(DecodeHintType.TRY_HARDER, true);
+
+    const reader = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 200 });
 
     try {
-      const BarcodeDetector = (window as WindowWithBarcodeDetector).BarcodeDetector;
-
-      if (!BarcodeDetector || !navigator.mediaDevices?.getUserMedia) {
-        setScannerMode("manual");
-        setScannerStatus("error");
-        setScannerMessage("Tu navegador no soporta lectura automatica. Ingresalo manualmente.");
-        return;
-      }
-
-      detectorRef.current = new BarcodeDetector({
-        formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "itf"],
-      });
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+      const controls = await reader.decodeFromConstraints(
+        {
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
         },
-        audio: false,
-      });
-
-      streamRef.current = stream;
+        videoRef.current!,
+        (result) => {
+          if (!result || scanInFlightRef.current) return;
+          const raw = result.getText().replace(/\D/g, "");
+          if (!raw) return;
+          scanInFlightRef.current = true;
+          void lookupBarcode(raw);
+        }
+      );
+      controlsRef.current = controls;
       setScannerStatus("scanning");
       setScannerMessage("Apunta al codigo y mantenelo dentro del recuadro.");
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-
-      const scan = async () => {
-        if (!videoRef.current || !detectorRef.current || scanInFlightRef.current) {
-          scanTimerRef.current = window.setTimeout(scan, 450);
-          return;
-        }
-
-        try {
-          const barcodes = await detectorRef.current.detect(videoRef.current);
-          const rawValue = barcodes[0]?.rawValue?.replace(/\D/g, "");
-
-          if (rawValue) {
-            scanInFlightRef.current = true;
-            void lookupBarcode(rawValue);
-            return;
-          }
-        } catch {
-          setScannerMode("manual");
-          setScannerStatus("error");
-          setScannerMessage("No pudimos leer con la camara. Probalo manualmente.");
-          stopScanner();
-          return;
-        }
-
-        scanTimerRef.current = window.setTimeout(scan, 450);
-      };
-
-      scanTimerRef.current = window.setTimeout(scan, 300);
     } catch (err) {
       stopScanner();
       setScannerMode("manual");
       setScannerStatus("error");
+      const isPermission = err instanceof DOMException && err.name === "NotAllowedError";
       setScannerMessage(
-        err instanceof DOMException && err.name === "NotAllowedError"
-          ? "La camara esta bloqueada. Habilitala o ingresalo manualmente."
+        isPermission
+          ? "La camara esta bloqueada. Habilitala desde el navegador o ingresalo manualmente."
           : "No pudimos abrir la camara. Ingresalo manualmente."
       );
     }

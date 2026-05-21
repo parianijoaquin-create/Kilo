@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useProfile } from "@/hooks/useProfile";
 import { bmr, tdee, dailyKcalTarget, defaultMacroTargets } from "@/lib/nutrition/formulas";
@@ -25,7 +25,7 @@ const ACTIVITY_OPTIONS: { value: ActivityLevel; label: string; sub: string }[] =
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { updateProfile } = useProfile();
+  const { profile, updateProfile } = useProfile();
 
   const [step, setStep] = useState<Step>("welcome");
   const [displayName, setDisplayName] = useState("");
@@ -37,6 +37,20 @@ export default function OnboardingPage() {
   const [goalType, setGoalType] = useState<GoalType>("lose");
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>("moderate");
   const [saving, setSaving] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    if (!profile || hydrated) return;
+    if (profile.display_name)        setDisplayName(profile.display_name);
+    if (profile.birth_date)          setBirthYear(profile.birth_date.slice(0, 4));
+    if (profile.sex)                 setSex(profile.sex);
+    if (profile.height_cm != null)   setHeightCm(String(profile.height_cm));
+    if (profile.current_weight_kg)   setWeightKg(String(profile.current_weight_kg));
+    if (profile.goal_weight_kg)      setGoalWeight(String(profile.goal_weight_kg));
+    if (profile.goal_type)           setGoalType(profile.goal_type);
+    if (profile.activity_level)      setActivityLevel(profile.activity_level);
+    setHydrated(true);
+  }, [profile, hydrated]);
 
   async function handleFinish() {
     setSaving(true);

@@ -9,6 +9,7 @@ import { Stat } from "@/components/ui/Stat";
 import { IconSearch, IconPlus, IconDroplet } from "@/components/icons";
 import { useDiary, type DiaryMeal, type DiaryItem } from "@/hooks/useDiary";
 import { useProfile } from "@/hooks/useProfile";
+import { useToday } from "@/hooks/useToday";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
 
 const STANDARD_MEALS = ["morning", "lunch", "snack", "dinner"] as const;
@@ -41,10 +42,9 @@ function fmtNum(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
 }
 
-function FoodLogRow({ item, isFirst, isLast }: { item: DiaryItem; isFirst: boolean; isLast: boolean }) {
+function FoodLogRow({ item, isFirst, isLast, onDelete }: { item: DiaryItem; isFirst: boolean; isLast: boolean; onDelete: () => void }) {
   return (
     <div
-      className="kilo-pressable"
       style={{
         background: "var(--bg-1)",
         border: "1px solid var(--line-1)",
@@ -57,9 +57,29 @@ function FoodLogRow({ item, isFirst, isLast }: { item: DiaryItem; isFirst: boole
         display: "flex",
         alignItems: "center",
         gap: 12,
-        cursor: "pointer",
+        position: "relative",
       }}
     >
+      <button
+        onClick={() => {
+          if (window.confirm(`¿Borrar "${item.item_name_snapshot}" del diario?`)) onDelete();
+        }}
+        aria-label="Borrar item"
+        style={{
+          position: "absolute",
+          top: 6, right: 8,
+          width: 22, height: 22,
+          background: "transparent",
+          border: "none",
+          color: "var(--text-3)",
+          fontSize: 14,
+          cursor: "pointer",
+          lineHeight: 1,
+          opacity: 0.5,
+        }}
+      >
+        ×
+      </button>
       <span style={{ fontSize: 22, lineHeight: 1 }}>🍽️</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
@@ -103,10 +123,12 @@ function MealSection({
   mealType,
   meal,
   onAdd,
+  onDeleteItem,
 }: {
   mealType: string;
   meal: DiaryMeal | null;
   onAdd: () => void;
+  onDeleteItem: (itemId: string) => void;
 }) {
   const items = meal?.meal_items ?? [];
   const mealKcal = Math.round(items.reduce((s, i) => s + (i.calories_kcal ?? 0), 0));
@@ -173,6 +195,7 @@ function MealSection({
               item={item}
               isFirst={idx === 0}
               isLast={idx === items.length - 1}
+              onDelete={() => onDeleteItem(item.id)}
             />
           ))}
           <button
@@ -202,8 +225,8 @@ function MealSection({
 
 export default function DiaryPage() {
   const { openSheet } = useSheet();
-  const today = new Date().toISOString().split("T")[0];
-  const { meals, totals, addMealItem } = useDiary(today);
+  const today = useToday();
+  const { meals, totals, addMealItem, deleteMealItem } = useDiary(today);
   const { profile } = useProfile();
   const DATE_STRIP = useMemo(() => buildDateStrip(), []);
 
@@ -405,6 +428,7 @@ export default function DiaryPage() {
                 mealType={mealType}
                 meal={meal}
                 onAdd={() => openSheet(mealType, addFoodToMeal)}
+                onDeleteItem={(itemId) => deleteMealItem(itemId)}
               />
             );
           })}

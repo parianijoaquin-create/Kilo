@@ -15,7 +15,7 @@ const GOAL_ADJUSTMENTS: Record<GoalType, number> = {
   recomp: -200,
 };
 
-/** Mifflin-St Jeor BMR */
+/** Mifflin-St Jeor BMR. For "other"/"prefer_not_to_say" uses the midpoint (-78) to avoid biasing toward either branch. */
 export function bmr(params: {
   weight_kg: number;
   height_cm: number;
@@ -24,7 +24,9 @@ export function bmr(params: {
 }): number {
   const { weight_kg, height_cm, age_years, sex } = params;
   const base = 10 * weight_kg + 6.25 * height_cm - 5 * age_years;
-  return sex === "male" ? base + 5 : base - 161;
+  if (sex === "male")   return base + 5;
+  if (sex === "female") return base - 161;
+  return base - 78;
 }
 
 /** Total daily energy expenditure */

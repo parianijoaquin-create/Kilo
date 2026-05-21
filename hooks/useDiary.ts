@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useToday } from "@/hooks/useToday";
 
 export interface DiaryFood {
   canonical_name: string;
@@ -34,7 +35,8 @@ export interface DiaryMeal {
 }
 
 export function useDiary(date?: string) {
-  const targetDate = date ?? new Date().toISOString().split("T")[0];
+  const today = useToday();
+  const targetDate = date ?? today;
   const [meals, setMeals] = useState<DiaryMeal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +95,17 @@ export function useDiary(date?: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "No autenticado" };
 
-    const existing = meals.find((m) => m.meal_type === mealType);
+    // Fetch authoritative meal from DB (avoids races where local state lags behind concurrent inserts)
+    const { data: existingMeals } = await supabase
+      .from("meals")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("meal_type", mealType)
+      .gte("eaten_at", `${targetDate}T00:00:00`)
+      .lte("eaten_at", `${targetDate}T23:59:59`)
+      .limit(1);
+
+    const existing = existingMeals?.[0] as { id: string } | undefined;
     let mealId: string;
 
     if (existing) {
@@ -132,7 +144,7 @@ export function useDiary(date?: string) {
         .single();
       if (!fetchErr && data) {
         setMeals((prev) =>
-          existing
+          prev.some((m) => m.id === mealId)
             ? prev.map((m) => (m.id === mealId ? (data as unknown as DiaryMeal) : m))
             : [...prev, data as unknown as DiaryMeal]
         );
@@ -140,7 +152,7 @@ export function useDiary(date?: string) {
     }
 
     return { error: error?.message ?? null };
-  }, [meals]);
+  }, [targetDate]);
 
   const deleteMealItem = useCallback(async (itemId: string) => {
     const { error } = await supabase.from("meal_items").delete().eq("id", itemId);

@@ -23,6 +23,7 @@ import { Stat } from "@/components/ui/Stat";
 import { Bar } from "@/components/ui/Bar";
 import { useProfile } from "@/hooks/useProfile";
 import { useDiary } from "@/hooks/useDiary";
+import { useToday } from "@/hooks/useToday";
 import { useHabits } from "@/hooks/useHabits";
 import { useWeightLog } from "@/hooks/useWeightLog";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
@@ -47,7 +48,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const { openSheet } = useSheet();
   const { profile } = useProfile();
-  const today = new Date().toISOString().split("T")[0];
+  const today = useToday();
   const { meals, totals, addMealItem } = useDiary(today);
 
   const addFoodToMeal = async (food: FoodSearchResult, mealType: string) => {

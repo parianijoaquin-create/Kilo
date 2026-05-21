@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerSupabase } from "@/lib/supabase/server";
 
 type Nutriments = Record<string, number | string | undefined>;
 
@@ -78,6 +79,12 @@ function adminClient() {
 }
 
 export async function GET(request: NextRequest) {
+  const userClient = await createServerSupabase();
+  const { data: { user } } = await userClient.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+
   const barcode = request.nextUrl.searchParams.get("barcode")?.replace(/\D/g, "") ?? "";
 
   if (!/^\d{8,14}$/.test(barcode)) {
@@ -99,15 +106,23 @@ export async function GET(request: NextRequest) {
     "nutriments",
   ].join(",");
 
-  const offRes = await fetch(
-    `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?fields=${fields}`,
-    {
-      headers: {
-        "User-Agent": "Kilo/0.1 (barcode lookup)",
-      },
-      next: { revalidate: 60 * 60 * 24 },
-    }
-  );
+  let offRes: Response;
+  try {
+    offRes = await fetch(
+      `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?fields=${fields}`,
+      {
+        headers: { "User-Agent": "Kilo/0.1 (barcode lookup)" },
+        next: { revalidate: 60 * 60 * 24 },
+        signal: AbortSignal.timeout(5000),
+      }
+    );
+  } catch (err) {
+    const isTimeout = err instanceof DOMException && err.name === "TimeoutError";
+    return NextResponse.json(
+      { error: isTimeout ? "Open Food Facts no respondió a tiempo" : "Error de red consultando Open Food Facts" },
+      { status: 504 }
+    );
+  }
 
   if (!offRes.ok) {
     return NextResponse.json({ error: "No pudimos consultar Open Food Facts" }, { status: 502 });

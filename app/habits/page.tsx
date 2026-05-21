@@ -92,7 +92,7 @@ function buildHabitView(habit: Habit, indexInList: number, week: Date[]): HabitV
   return { id: habit.id, name: habit.title, dose, Icon, palette, streak, weekDone, todayIdx, doneToday };
 }
 
-function HabitCard({ habit, onToggle }: { habit: HabitView; onToggle: () => void }) {
+function HabitCard({ habit, onToggle, onDelete }: { habit: HabitView; onToggle: () => void; onDelete: () => void }) {
   const { palette, Icon } = habit;
   const gradBg = habit.doneToday
     ? `linear-gradient(140deg, ${palette.bg.replace("0.15", "0.06").replace("0.18", "0.06")} 0%, var(--bg-1) 60%)`
@@ -103,7 +103,28 @@ function HabitCard({ habit, onToggle }: { habit: HabitView; onToggle: () => void
       background: gradBg,
       border: habit.doneToday ? `1px solid ${palette.c}44` : "1px solid var(--line-1)",
       borderRadius: 20, padding: 16,
+      position: "relative",
     }}>
+      <button
+        onClick={() => {
+          if (window.confirm(`¿Borrar el hábito "${habit.name}"?`)) onDelete();
+        }}
+        aria-label="Borrar hábito"
+        style={{
+          position: "absolute",
+          top: 8, right: 8,
+          width: 24, height: 24,
+          background: "transparent",
+          border: "none",
+          color: "var(--text-3)",
+          fontSize: 14,
+          cursor: "pointer",
+          lineHeight: 1,
+          opacity: 0.5,
+        }}
+      >
+        ×
+      </button>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{
           width: 44, height: 44, borderRadius: 14,
@@ -173,25 +194,28 @@ function HabitCard({ habit, onToggle }: { habit: HabitView; onToggle: () => void
 }
 
 function NewHabitForm({ onCreate, onCancel }: {
-  onCreate: (data: { title: string; code: string; target_value?: number; target_unit?: string }) => Promise<void>;
+  onCreate: (data: { title: string; code: string; target_value?: number; target_unit?: string }) => Promise<{ error: string | null }>;
   onCancel: () => void;
 }) {
   const [title, setTitle] = useState("");
   const [target, setTarget] = useState("");
   const [unit, setUnit] = useState("");
   const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
     setSaving(true);
-    await onCreate({
+    setErrorMsg(null);
+    const { error } = await onCreate({
       title: title.trim(),
       code: title.trim().toLowerCase().replace(/\s+/g, "_").slice(0, 32),
       target_value: target ? Number(target) : undefined,
       target_unit: unit.trim() || undefined,
     });
     setSaving(false);
+    if (error) setErrorMsg(error);
   }
 
   const inputStyle: React.CSSProperties = {
@@ -257,12 +281,27 @@ function NewHabitForm({ onCreate, onCancel }: {
           Cancelar
         </button>
       </div>
+      {errorMsg && (
+        <div style={{
+          marginTop: 2,
+          padding: "8px 10px",
+          background: "rgba(255,107,107,0.08)",
+          border: "1px solid rgba(255,107,107,0.3)",
+          borderRadius: 8,
+          fontSize: 11.5,
+          color: "var(--red)",
+          fontFamily: "var(--font-mono)",
+          lineHeight: 1.4,
+        }}>
+          {errorMsg}
+        </div>
+      )}
     </form>
   );
 }
 
 export default function HabitsPage() {
-  const { habits, toggleHabit, createHabit, loading } = useHabits();
+  const { habits, toggleHabit, createHabit, deleteHabit, loading } = useHabits();
   const [creating, setCreating] = useState(false);
   const week = buildWeekDates();
   const views = habits.map((h, i) => buildHabitView(h, i, week));
@@ -372,14 +411,20 @@ export default function HabitsPage() {
         <SectionHead title="Tus hábitos" />
         <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
           {views.map((h) => (
-            <HabitCard key={h.id} habit={h} onToggle={() => toggleHabit(h.id)} />
+            <HabitCard
+              key={h.id}
+              habit={h}
+              onToggle={() => toggleHabit(h.id)}
+              onDelete={() => deleteHabit(h.id)}
+            />
           ))}
 
           {creating ? (
             <NewHabitForm
               onCreate={async (data) => {
-                const { error } = await createHabit({ ...data, frequency: "daily" });
-                if (!error) setCreating(false);
+                const res = await createHabit({ ...data, frequency: "daily" });
+                if (!res.error) setCreating(false);
+                return res;
               }}
               onCancel={() => setCreating(false)}
             />
