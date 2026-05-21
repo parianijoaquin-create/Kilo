@@ -9,26 +9,91 @@ import {
   IconPill, IconDroplet, IconMoon,
   IconLeaf, IconActivity, IconRunner,
 } from "@/components/icons";
-import { KILO_DATA } from "@/data/mock";
-import type { MockHabit } from "@/types";
+import { useHabits } from "@/hooks/useHabits";
+import type { Habit, HabitColor } from "@/types";
 
 const DAYS = ["L", "M", "M", "J", "V", "S", "D"];
+const ROTATING_COLORS: HabitColor[] = ["lime", "blue", "violet", "orange", "red"];
 
-const HABIT_ICON_MAP: Record<string, typeof IconPill> = {
-  creatina: IconPill,
-  water: IconDroplet,
-  sleep: IconMoon,
-};
-
-const HABIT_COLOR_MAP: Record<string, { c: string; bg: string }> = {
+const HABIT_COLOR_MAP: Record<HabitColor, { c: string; bg: string }> = {
   lime:   { c: "var(--lime)",   bg: "rgba(198,255,80,0.15)" },
   blue:   { c: "var(--blue)",   bg: "rgba(91,141,239,0.18)" },
   violet: { c: "var(--violet)", bg: "rgba(157,124,255,0.18)" },
+  orange: { c: "var(--orange)", bg: "rgba(255,165,80,0.18)" },
+  red:    { c: "var(--red)",    bg: "rgba(255,107,107,0.18)" },
 };
 
-function HabitCard({ habit, onToggle }: { habit: MockHabit; onToggle: () => void }) {
-  const palette = HABIT_COLOR_MAP[habit.color] ?? HABIT_COLOR_MAP.lime;
-  const Icon = HABIT_ICON_MAP[habit.id] ?? IconPill;
+function iconFromCode(code: string | undefined) {
+  const k = (code ?? "").toLowerCase();
+  if (k.includes("creatina") || k.includes("pill") || k.includes("vitamin")) return IconPill;
+  if (k.includes("water") || k.includes("hidrat") || k.includes("agua")) return IconDroplet;
+  if (k.includes("sleep") || k.includes("sueño") || k.includes("sueno")) return IconMoon;
+  if (k.includes("walk") || k.includes("camin")) return IconRunner;
+  if (k.includes("stretch") || k.includes("estirar")) return IconActivity;
+  return IconLeaf;
+}
+
+// Returns Mon=0..Sun=6 index for a Date
+function weekIndex(d: Date) {
+  const day = d.getDay(); // Sun=0..Sat=6
+  return (day + 6) % 7;   // Mon=0..Sun=6
+}
+
+function ymd(d: Date) {
+  return d.toISOString().split("T")[0];
+}
+
+function buildWeekDates() {
+  const now = new Date();
+  const idx = weekIndex(now);
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - idx);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
+interface HabitView {
+  id: string;
+  name: string;
+  dose: string;
+  Icon: typeof IconPill;
+  palette: { c: string; bg: string };
+  streak: number;
+  weekDone: boolean[];
+  todayIdx: number;
+  doneToday: boolean;
+}
+
+function buildHabitView(habit: Habit, indexInList: number, week: Date[]): HabitView {
+  const colorKey = ROTATING_COLORS[indexInList % ROTATING_COLORS.length];
+  const palette = HABIT_COLOR_MAP[colorKey];
+  const Icon = iconFromCode(habit.code ?? habit.title);
+  const logs = habit.habit_logs ?? [];
+  const doneByDate = new Set(logs.filter((l) => l.status === "done").map((l) => l.log_date));
+  const weekDone = week.map((d) => doneByDate.has(ymd(d)));
+  const todayIdx = weekIndex(new Date());
+  const doneToday = weekDone[todayIdx];
+
+  // Streak: walk back from today
+  let streak = 0;
+  const cursor = new Date();
+  while (doneByDate.has(ymd(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  const dose = habit.target_value != null
+    ? `${habit.target_value}${habit.target_unit ? " " + habit.target_unit : ""}`
+    : habit.frequency === "daily" ? "diario" : habit.frequency;
+
+  return { id: habit.id, name: habit.title, dose, Icon, palette, streak, weekDone, todayIdx, doneToday };
+}
+
+function HabitCard({ habit, onToggle }: { habit: HabitView; onToggle: () => void }) {
+  const { palette, Icon } = habit;
   const gradBg = habit.doneToday
     ? `linear-gradient(140deg, ${palette.bg.replace("0.15", "0.06").replace("0.18", "0.06")} 0%, var(--bg-1) 60%)`
     : "var(--bg-1)";
@@ -107,15 +172,114 @@ function HabitCard({ habit, onToggle }: { habit: MockHabit; onToggle: () => void
   );
 }
 
-export default function HabitsPage() {
-  const D = KILO_DATA;
-  const [habits, setHabits] = useState(D.habits);
+function NewHabitForm({ onCreate, onCancel }: {
+  onCreate: (data: { title: string; code: string; target_value?: number; target_unit?: string }) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [target, setTarget] = useState("");
+  const [unit, setUnit] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const toggleHabit = (id: string) => {
-    setHabits((prev) =>
-      prev.map((h) => (h.id === id ? { ...h, doneToday: !h.doneToday } : h))
-    );
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setSaving(true);
+    await onCreate({
+      title: title.trim(),
+      code: title.trim().toLowerCase().replace(/\s+/g, "_").slice(0, 32),
+      target_value: target ? Number(target) : undefined,
+      target_unit: unit.trim() || undefined,
+    });
+    setSaving(false);
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "10px 12px",
+    background: "var(--bg-2)", border: "1px solid var(--line-2)",
+    borderRadius: 10, color: "var(--text-1)",
+    fontSize: 13.5, fontFamily: "var(--font-body)", outline: "none",
+    boxSizing: "border-box",
   };
+
+  return (
+    <form onSubmit={submit} style={{
+      background: "var(--bg-1)", border: "1px solid var(--lime)",
+      borderRadius: 20, padding: 16, display: "flex", flexDirection: "column", gap: 10,
+    }}>
+      <input
+        autoFocus
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Nombre del hábito (ej. Creatina)"
+        style={inputStyle}
+      />
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          value={target}
+          onChange={(e) => setTarget(e.target.value.replace(/[^\d.]/g, ""))}
+          placeholder="Cantidad (opcional)"
+          inputMode="decimal"
+          style={{ ...inputStyle, flex: 2 }}
+        />
+        <input
+          value={unit}
+          onChange={(e) => setUnit(e.target.value)}
+          placeholder="Unidad"
+          style={{ ...inputStyle, flex: 1 }}
+        />
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          type="submit"
+          disabled={saving || !title.trim()}
+          style={{
+            flex: 1, padding: "10px 0",
+            background: "var(--lime)", border: "none",
+            borderRadius: 10, color: "#0a0d15",
+            fontSize: 12.5, fontWeight: 700,
+            cursor: saving || !title.trim() ? "default" : "pointer",
+            opacity: saving || !title.trim() ? 0.55 : 1,
+          }}
+        >
+          {saving ? "Guardando…" : "Crear"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          style={{
+            padding: "10px 16px",
+            background: "transparent", border: "1px solid var(--line-2)",
+            borderRadius: 10, color: "var(--text-3)",
+            fontSize: 12.5, cursor: "pointer",
+          }}
+        >
+          Cancelar
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export default function HabitsPage() {
+  const { habits, toggleHabit, createHabit, loading } = useHabits();
+  const [creating, setCreating] = useState(false);
+  const week = buildWeekDates();
+  const views = habits.map((h, i) => buildHabitView(h, i, week));
+
+  const totalToday = views.length;
+  const doneTodayCount = views.filter((v) => v.doneToday).length;
+  const maxStreak = views.reduce((m, v) => Math.max(m, v.streak), 0);
+
+  const weekRange = (() => {
+    const first = week[0];
+    const last = week[6];
+    const sameMonth = first.getMonth() === last.getMonth();
+    const m = (d: Date) => d.toLocaleDateString("es-AR", { month: "long" });
+    return sameMonth
+      ? `${first.getDate()} – ${last.getDate()} ${m(last)}`
+      : `${first.getDate()} ${m(first)} – ${last.getDate()} ${m(last)}`;
+  })();
 
   return (
     <AppShell>
@@ -129,64 +293,68 @@ export default function HabitsPage() {
             Hábitos
           </h1>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>
-            Esta semana: <span style={{ color: "var(--lime)" }}>3 de 3 al día</span> · sigamos así
+            {loading
+              ? "Cargando…"
+              : totalToday === 0
+                ? "Creá tu primer hábito"
+                : <>Hoy: <span style={{ color: "var(--lime)" }}>{doneTodayCount} de {totalToday}</span></>}
           </div>
         </div>
 
         {/* Weekly heatmap */}
-        <div style={{ padding: "16px 20px 0" }}>
-          <div style={{ background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 18, padding: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-              <div>
-                <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: "var(--font-mono)", fontWeight: 600 }}>
-                  SEMANA
+        {views.length > 0 && (
+          <div style={{ padding: "16px 20px 0" }}>
+            <div style={{ background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 18, padding: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.14em", textTransform: "uppercase", fontFamily: "var(--font-mono)", fontWeight: 600 }}>
+                    SEMANA
+                  </div>
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 500, letterSpacing: "-0.03em", color: "var(--text-1)", marginTop: 2 }}>
+                    {weekRange}
+                  </div>
                 </div>
-                <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 500, letterSpacing: "-0.03em", color: "var(--text-1)", marginTop: 2 }}>
-                  9 – 15 mayo
-                </div>
+                {maxStreak > 0 && (
+                  <div style={{
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                    padding: "4px 10px",
+                    background: "rgba(198,255,80,0.12)", border: "0.5px solid rgba(198,255,80,0.3)",
+                    borderRadius: 100, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--lime)", fontWeight: 600,
+                  }}>
+                    <IconFlame size={12} color="var(--lime)" /> {maxStreak} días
+                  </div>
+                )}
               </div>
-              <div style={{
-                display: "inline-flex", alignItems: "center", gap: 4,
-                padding: "4px 10px",
-                background: "rgba(198,255,80,0.12)", border: "0.5px solid rgba(198,255,80,0.3)",
-                borderRadius: 100, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--lime)", fontWeight: 600,
-              }}>
-                <IconFlame size={12} color="var(--lime)" /> 14 días
+
+              {/* day labels */}
+              <div style={{ display: "flex", gap: 6, marginLeft: 28 }}>
+                {DAYS.map((d, i) => (
+                  <div key={i} style={{
+                    flex: 1, fontSize: 10, color: "var(--text-3)",
+                    fontFamily: "var(--font-mono)", letterSpacing: "0.05em",
+                    textAlign: "center", textTransform: "uppercase", fontWeight: 600,
+                  }}>
+                    {d}
+                  </div>
+                ))}
               </div>
-            </div>
 
-            {/* day labels */}
-            <div style={{ display: "flex", gap: 6, marginLeft: 28 }}>
-              {DAYS.map((d, i) => (
-                <div key={i} style={{
-                  flex: 1, fontSize: 10, color: "var(--text-3)",
-                  fontFamily: "var(--font-mono)", letterSpacing: "0.05em",
-                  textAlign: "center", textTransform: "uppercase", fontWeight: 600,
-                }}>
-                  {d}
-                </div>
-              ))}
-            </div>
-
-            {/* heatmap rows */}
-            {habits.map((h) => {
-              const palette = HABIT_COLOR_MAP[h.color] ?? HABIT_COLOR_MAP.lime;
-              const Icon = HABIT_ICON_MAP[h.id] ?? IconPill;
-              return (
+              {/* heatmap rows */}
+              {views.map((h) => (
                 <div key={h.id} style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
                   <div style={{
-                    width: 22, height: 22, borderRadius: 6, background: palette.bg,
+                    width: 22, height: 22, borderRadius: 6, background: h.palette.bg,
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
-                    <Icon size={12} color={palette.c} />
+                    <h.Icon size={12} color={h.palette.c} />
                   </div>
                   {h.weekDone.map((done, i) => {
                     const isToday = i === h.todayIdx;
                     return (
                       <div key={i} style={{
                         flex: 1, aspectRatio: "1/1", borderRadius: 7,
-                        background: done ? palette.c : "var(--bg-2)",
-                        border: isToday && !done ? `1.5px dashed ${palette.c}` : "none",
+                        background: done ? h.palette.c : "var(--bg-2)",
+                        border: isToday && !done ? `1.5px dashed ${h.palette.c}` : "none",
                         opacity: done ? 1 : i > h.todayIdx ? 0.35 : 0.6,
                         display: "flex", alignItems: "center", justifyContent: "center",
                       }}>
@@ -195,40 +363,53 @@ export default function HabitsPage() {
                     );
                   })}
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Habit cards */}
         <SectionHead title="Tus hábitos" />
         <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {habits.map((h) => (
+          {views.map((h) => (
             <HabitCard key={h.id} habit={h} onToggle={() => toggleHabit(h.id)} />
           ))}
 
-          {/* Add habit button */}
-          <button style={{
-            background: "transparent", border: "1.5px dashed var(--line-2)",
-            borderRadius: 20, padding: 16,
-            cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
-            width: "100%", textAlign: "left",
-          }}>
-            <div style={{
-              width: 44, height: 44, borderRadius: 14, background: "var(--bg-2)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <IconPlus size={20} color="var(--text-2)" />
-            </div>
-            <div>
-              <div style={{ fontFamily: "var(--font-display)", fontSize: 14.5, fontWeight: 500, letterSpacing: "-0.015em", color: "var(--text-2)" }}>
-                Nuevo hábito
+          {creating ? (
+            <NewHabitForm
+              onCreate={async (data) => {
+                const { error } = await createHabit({ ...data, frequency: "daily" });
+                if (!error) setCreating(false);
+              }}
+              onCancel={() => setCreating(false)}
+            />
+          ) : (
+            <button
+              onClick={() => setCreating(true)}
+              className="kilo-pressable"
+              style={{
+                background: "transparent", border: "1.5px dashed var(--line-2)",
+                borderRadius: 20, padding: 16,
+                cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
+                width: "100%", textAlign: "left",
+              }}
+            >
+              <div style={{
+                width: 44, height: 44, borderRadius: 14, background: "var(--bg-2)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <IconPlus size={20} color="var(--text-2)" />
               </div>
-              <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 1 }}>
-                meditar, leer, estiramientos…
+              <div>
+                <div style={{ fontFamily: "var(--font-display)", fontSize: 14.5, fontWeight: 500, letterSpacing: "-0.015em", color: "var(--text-2)" }}>
+                  Nuevo hábito
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 1 }}>
+                  meditar, leer, estiramientos…
+                </div>
               </div>
-            </div>
-          </button>
+            </button>
+          )}
         </div>
 
         {/* Suggestions */}

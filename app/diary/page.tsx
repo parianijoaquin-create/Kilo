@@ -1,18 +1,15 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Screen } from "@/components/layout/Screen";
 import { Ring } from "@/components/ui/Ring";
 import { Bar } from "@/components/ui/Bar";
 import { Stat } from "@/components/ui/Stat";
 import { IconSearch, IconPlus, IconDroplet } from "@/components/icons";
-import { KILO_DATA } from "@/data/mock";
 import { useDiary, type DiaryMeal, type DiaryItem } from "@/hooks/useDiary";
+import { useProfile } from "@/hooks/useProfile";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
-
-// TODO: conectar metas a useProfile cuando esté disponible
-const GOALS = KILO_DATA.today;
 
 const STANDARD_MEALS = ["morning", "lunch", "snack", "dinner"] as const;
 
@@ -207,8 +204,16 @@ export default function DiaryPage() {
   const { openSheet } = useSheet();
   const today = new Date().toISOString().split("T")[0];
   const { meals, totals, addMealItem } = useDiary(today);
-  const t = GOALS;
+  const { profile } = useProfile();
   const DATE_STRIP = useMemo(() => buildDateStrip(), []);
+
+  const kcalGoal    = profile?.daily_target_kcal ?? 2000;
+  const proteinGoal = profile?.protein_target_g  ?? 150;
+  const carbsGoal   = profile?.carbs_target_g    ?? 200;
+  const fatGoal     = profile?.fat_target_g      ?? 65;
+
+  const [water, setWater] = useState(0);
+  const waterGoal = 8;
 
   const addFoodToMeal = useCallback(async (food: FoodSearchResult, mealType: string) => {
     const grams = food.default_portion_g ?? 100;
@@ -234,9 +239,9 @@ export default function DiaryPage() {
   const fatTotal     = Math.round(totals.fat);
 
   const macroRows = [
-    { l: "Proteína", cur: proteinTotal, max: t.macros.protein.goal, code: "P", color: "var(--lime)" },
-    { l: "Carbos",   cur: carbsTotal,   max: t.macros.carbs.goal,   code: "C", color: "var(--blue)" },
-    { l: "Grasas",   cur: fatTotal,     max: t.macros.fat.goal,     code: "G", color: "var(--orange)" },
+    { l: "Proteína", cur: proteinTotal, max: Math.round(proteinGoal), code: "P", color: "var(--lime)" },
+    { l: "Carbos",   cur: carbsTotal,   max: Math.round(carbsGoal),   code: "C", color: "var(--blue)" },
+    { l: "Grasas",   cur: fatTotal,     max: Math.round(fatGoal),     code: "G", color: "var(--orange)" },
   ];
 
   return (
@@ -342,11 +347,11 @@ export default function DiaryPage() {
                 fontSize: 10,
                 color: "var(--text-2)",
               }}>
-                <span style={{ color: "var(--lime)" }}>−{t.kcalGoal - kcalTotal}</span>
-                de meta {fmtNum(t.kcalGoal)}
+                <span style={{ color: "var(--lime)" }}>−{Math.max(0, kcalGoal - kcalTotal)}</span>
+                de meta {fmtNum(kcalGoal)}
               </div>
             </div>
-            <Ring size={68} stroke={7} value={kcalTotal} max={t.kcalGoal} color="var(--lime)">
+            <Ring size={68} stroke={7} value={kcalTotal} max={kcalGoal} color="var(--lime)">
               <div style={{
                 fontFamily: "var(--font-display)",
                 fontSize: 14,
@@ -354,7 +359,7 @@ export default function DiaryPage() {
                 letterSpacing: "-0.03em",
                 color: "var(--text-1)",
               }}>
-                {Math.round((kcalTotal / t.kcalGoal) * 100)}%
+                {kcalGoal > 0 ? Math.round((kcalTotal / kcalGoal) * 100) : 0}%
               </div>
             </Ring>
           </div>
@@ -426,27 +431,28 @@ export default function DiaryPage() {
                 Agua
               </span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)" }}>
-                <span style={{ color: "var(--blue)", fontWeight: 600 }}>{t.water}</span>/{t.waterGoal} vasos
+                <span style={{ color: "var(--blue)", fontWeight: 600 }}>{water}</span>/{waterGoal} vasos
               </span>
             </div>
             <div style={{ display: "flex", gap: 5 }}>
-              {Array.from({ length: t.waterGoal }).map((_, i) => (
+              {Array.from({ length: waterGoal }).map((_, i) => (
                 <div
                   key={i}
+                  onClick={() => setWater(i + 1 === water ? i : i + 1)}
                   className="kilo-pressable"
                   style={{
                     flex: 1,
                     height: 32,
                     borderRadius: 6,
-                    background: i < t.water ? "rgba(91,141,239,0.25)" : "var(--bg-2)",
-                    border: i < t.water ? "1px solid rgba(91,141,239,0.5)" : "1px solid var(--line-1)",
+                    background: i < water ? "rgba(91,141,239,0.25)" : "var(--bg-2)",
+                    border: i < water ? "1px solid rgba(91,141,239,0.5)" : "1px solid var(--line-1)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     cursor: "pointer",
                   }}
                 >
-                  {i < t.water && <IconDroplet size={12} color="var(--blue)" />}
+                  {i < water && <IconDroplet size={12} color="var(--blue)" />}
                 </div>
               ))}
             </div>

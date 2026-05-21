@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useProfile } from "@/hooks/useProfile";
+import { bmr, tdee, dailyKcalTarget, defaultMacroTargets } from "@/lib/nutrition/formulas";
 import type { GoalType, ActivityLevel, Sex } from "@/types";
 
 type Step = "welcome" | "personal" | "goal" | "activity" | "done";
@@ -40,15 +41,32 @@ export default function OnboardingPage() {
   async function handleFinish() {
     setSaving(true);
     const birthDate = birthYear ? `${birthYear}-01-01` : undefined;
+    const weight = weightKg ? parseFloat(weightKg) : NaN;
+    const height = heightCm ? parseFloat(heightCm) : NaN;
+    const age = birthYear ? new Date().getFullYear() - parseInt(birthYear, 10) : NaN;
+
+    let kcalTarget: number | undefined;
+    let macros: { protein_g: number; carbs_g: number; fat_g: number } | undefined;
+
+    if (Number.isFinite(weight) && Number.isFinite(height) && Number.isFinite(age) && age > 0) {
+      const basal = bmr({ weight_kg: weight, height_cm: height, age_years: age, sex });
+      kcalTarget = dailyKcalTarget(tdee(basal, activityLevel), goalType);
+      macros = defaultMacroTargets(kcalTarget, goalType);
+    }
+
     await updateProfile({
       display_name: displayName || undefined,
       birth_date: birthDate,
       sex,
-      height_cm: heightCm ? parseFloat(heightCm) : undefined,
-      current_weight_kg: weightKg ? parseFloat(weightKg) : undefined,
+      height_cm: Number.isFinite(height) ? height : undefined,
+      current_weight_kg: Number.isFinite(weight) ? weight : undefined,
       goal_weight_kg: goalWeight ? parseFloat(goalWeight) : undefined,
       goal_type: goalType,
       activity_level: activityLevel,
+      daily_target_kcal: kcalTarget,
+      protein_target_g: macros?.protein_g,
+      carbs_target_g: macros?.carbs_g,
+      fat_target_g: macros?.fat_g,
       onboarding_completed: true,
     });
     router.push("/dashboard");

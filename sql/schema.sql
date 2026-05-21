@@ -3,7 +3,7 @@ create extension if not exists citext;
 
 -- ─── Profiles ────────────────────────────────────────────────────────────────
 
-create table public.profiles (
+create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email citext,
   display_name text not null default '',
@@ -28,7 +28,7 @@ create table public.profiles (
 
 -- ─── Food catalog ─────────────────────────────────────────────────────────────
 
-create table public.food_categories (
+create table if not exists public.food_categories (
   id bigserial primary key,
   parent_id bigint references public.food_categories(id) on delete set null,
   slug text not null unique,
@@ -36,7 +36,7 @@ create table public.food_categories (
   sort_order integer not null default 0
 );
 
-create table public.food_sources (
+create table if not exists public.food_sources (
   id bigserial primary key,
   code text not null unique,
   name text not null,
@@ -50,7 +50,7 @@ create table public.food_sources (
   created_at timestamptz not null default now()
 );
 
-create table public.foods (
+create table if not exists public.foods (
   id bigserial primary key,
   category_id bigint references public.food_categories(id) on delete set null,
   source_id bigint references public.food_sources(id) on delete restrict,
@@ -84,11 +84,11 @@ create table public.foods (
   unique (source_id, source_food_id)
 );
 
-create index foods_name_idx on public.foods (canonical_name);
-create index foods_verified_idx on public.foods (is_verified, verification_status);
-create index foods_category_idx on public.foods (category_id);
+create index if not exists foods_name_idx on public.foods (canonical_name);
+create index if not exists foods_verified_idx on public.foods (is_verified, verification_status);
+create index if not exists foods_category_idx on public.foods (category_id);
 
-create table public.barcode_products (
+create table if not exists public.barcode_products (
   id bigserial primary key,
   barcode text not null unique,
   food_id bigint not null references public.foods(id) on delete restrict,
@@ -110,12 +110,12 @@ create table public.barcode_products (
   updated_at timestamptz not null default now()
 );
 
-create index barcode_products_food_idx on public.barcode_products (food_id);
-create index barcode_products_brand_idx on public.barcode_products (brand_name);
+create index if not exists barcode_products_food_idx on public.barcode_products (food_id);
+create index if not exists barcode_products_brand_idx on public.barcode_products (brand_name);
 
 -- ─── Meals & diary ────────────────────────────────────────────────────────────
 
-create table public.meals (
+create table if not exists public.meals (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
   eaten_at timestamptz not null,
@@ -132,9 +132,9 @@ create table public.meals (
   updated_at timestamptz not null default now()
 );
 
-create index meals_user_date_idx on public.meals(user_id, eaten_at desc);
+create index if not exists meals_user_date_idx on public.meals(user_id, eaten_at desc);
 
-create table public.meal_items (
+create table if not exists public.meal_items (
   id uuid primary key default gen_random_uuid(),
   meal_id uuid not null references public.meals(id) on delete cascade,
   food_id bigint references public.foods(id) on delete set null,
@@ -158,11 +158,11 @@ create table public.meal_items (
   created_at timestamptz not null default now()
 );
 
-create index meal_items_meal_idx on public.meal_items(meal_id);
+create index if not exists meal_items_meal_idx on public.meal_items(meal_id);
 
 -- ─── Habits ───────────────────────────────────────────────────────────────────
 
-create table public.habits (
+create table if not exists public.habits (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
   code text,
@@ -175,9 +175,9 @@ create table public.habits (
   created_at timestamptz not null default now()
 );
 
-create index habits_user_idx on public.habits(user_id);
+create index if not exists habits_user_idx on public.habits(user_id);
 
-create table public.habit_logs (
+create table if not exists public.habit_logs (
   id uuid primary key default gen_random_uuid(),
   habit_id uuid not null references public.habits(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -191,11 +191,11 @@ create table public.habit_logs (
   unique(habit_id, log_date)
 );
 
-create index habit_logs_user_date_idx on public.habit_logs(user_id, log_date desc);
+create index if not exists habit_logs_user_date_idx on public.habit_logs(user_id, log_date desc);
 
 -- ─── Weight logs ──────────────────────────────────────────────────────────────
 
-create table public.weight_logs (
+create table if not exists public.weight_logs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
   logged_at timestamptz not null,
@@ -206,11 +206,11 @@ create table public.weight_logs (
   created_at timestamptz not null default now()
 );
 
-create index weight_logs_user_date_idx on public.weight_logs(user_id, logged_at desc);
+create index if not exists weight_logs_user_date_idx on public.weight_logs(user_id, logged_at desc);
 
 -- ─── Audit log ────────────────────────────────────────────────────────────────
 
-create table public.audit (
+create table if not exists public.audit (
   id bigserial primary key,
   actor_user_id uuid references public.profiles(id) on delete set null,
   table_name text not null,
@@ -232,15 +232,19 @@ begin
 end;
 $$;
 
+drop trigger if exists profiles_updated_at on public.profiles;
 create trigger profiles_updated_at before update on public.profiles
   for each row execute function public.set_updated_at();
 
+drop trigger if exists foods_updated_at on public.foods;
 create trigger foods_updated_at before update on public.foods
   for each row execute function public.set_updated_at();
 
+drop trigger if exists barcode_products_updated_at on public.barcode_products;
 create trigger barcode_products_updated_at before update on public.barcode_products
   for each row execute function public.set_updated_at();
 
+drop trigger if exists meals_updated_at on public.meals;
 create trigger meals_updated_at before update on public.meals
   for each row execute function public.set_updated_at();
 
@@ -259,6 +263,7 @@ begin
 end;
 $$;
 
+drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();

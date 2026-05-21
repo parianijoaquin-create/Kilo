@@ -2,7 +2,7 @@
 
 import { Ring } from "@/components/ui/Ring";
 import { Stat } from "@/components/ui/Stat";
-import { fmtNum } from "@/data/mock";
+import { fmtNum } from "@/lib/format";
 
 interface KcalHeroCardProps {
   kcalLogged: number;
