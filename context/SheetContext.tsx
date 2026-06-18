@@ -19,7 +19,8 @@ export interface FoodSearchResult {
 
 type AddItemFn = (
   food: FoodSearchResult,
-  mealType: string
+  mealType: string,
+  grams?: number
 ) => Promise<{ error: string | null }>;
 
 interface SheetState {

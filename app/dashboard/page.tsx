@@ -51,8 +51,8 @@ export default function DashboardPage() {
   const today = useToday();
   const { meals, totals, addMealItem } = useDiary(today);
 
-  const addFoodToMeal = async (food: FoodSearchResult, mealType: string) => {
-    const grams = food.default_portion_g ?? 100;
+  const addFoodToMeal = async (food: FoodSearchResult, mealType: string, gramsOverride?: number) => {
+    const grams = gramsOverride ?? food.default_portion_g ?? 100;
     const f = grams / 100;
     return addMealItem(mealType, {
       food_id: food.id,

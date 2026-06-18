@@ -127,5 +127,24 @@ export function useHabits() {
     return { error: error?.message ?? null };
   }, []);
 
-  return { habits, loading, error, toggleHabit, createHabit, deleteHabit };
+  const updateHabit = useCallback(async (
+    habitId: string,
+    updates: { title?: string; target_value?: number | null; target_unit?: string | null },
+  ) => {
+    const { data, error } = await supabase
+      .from("habits")
+      .update(updates)
+      .eq("id", habitId)
+      .select()
+      .single();
+
+    if (!error && data) {
+      setHabits((prev) =>
+        prev.map((h) => (h.id === habitId ? { ...h, ...(data as Habit) } : h))
+      );
+    }
+    return { error: error?.message ?? null };
+  }, []);
+
+  return { habits, loading, error, toggleHabit, createHabit, deleteHabit, updateHabit };
 }

@@ -65,6 +65,8 @@ interface HabitView {
   weekDone: boolean[];
   todayIdx: number;
   doneToday: boolean;
+  rawTargetValue: number | null;
+  rawTargetUnit: string | null;
 }
 
 function buildHabitView(habit: Habit, indexInList: number, week: Date[]): HabitView {
@@ -89,10 +91,14 @@ function buildHabitView(habit: Habit, indexInList: number, week: Date[]): HabitV
     ? `${habit.target_value}${habit.target_unit ? " " + habit.target_unit : ""}`
     : habit.frequency === "daily" ? "diario" : habit.frequency;
 
-  return { id: habit.id, name: habit.title, dose, Icon, palette, streak, weekDone, todayIdx, doneToday };
+  return {
+    id: habit.id, name: habit.title, dose, Icon, palette, streak, weekDone, todayIdx, doneToday,
+    rawTargetValue: habit.target_value ?? null,
+    rawTargetUnit: habit.target_unit ?? null,
+  };
 }
 
-function HabitCard({ habit, onToggle, onDelete }: { habit: HabitView; onToggle: () => void; onDelete: () => void }) {
+function HabitCard({ habit, onToggle, onDelete, onEdit }: { habit: HabitView; onToggle: () => void; onDelete: () => void; onEdit: () => void }) {
   const { palette, Icon } = habit;
   const gradBg = habit.doneToday
     ? `linear-gradient(140deg, ${palette.bg.replace("0.15", "0.06").replace("0.18", "0.06")} 0%, var(--bg-1) 60%)`
@@ -105,26 +111,42 @@ function HabitCard({ habit, onToggle, onDelete }: { habit: HabitView; onToggle: 
       borderRadius: 20, padding: 16,
       position: "relative",
     }}>
-      <button
-        onClick={() => {
-          if (window.confirm(`¿Borrar el hábito "${habit.name}"?`)) onDelete();
-        }}
-        aria-label="Borrar hábito"
-        style={{
-          position: "absolute",
-          top: 8, right: 8,
-          width: 24, height: 24,
-          background: "transparent",
-          border: "none",
-          color: "var(--text-3)",
-          fontSize: 14,
-          cursor: "pointer",
-          lineHeight: 1,
-          opacity: 0.5,
-        }}
-      >
-        ×
-      </button>
+      <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 2 }}>
+        <button
+          onClick={onEdit}
+          aria-label="Editar hábito"
+          style={{
+            width: 24, height: 24,
+            background: "transparent",
+            border: "none",
+            color: "var(--text-3)",
+            fontSize: 12,
+            cursor: "pointer",
+            lineHeight: 1,
+            opacity: 0.5,
+          }}
+        >
+          ✎
+        </button>
+        <button
+          onClick={() => {
+            if (window.confirm(`¿Borrar el hábito "${habit.name}"?`)) onDelete();
+          }}
+          aria-label="Borrar hábito"
+          style={{
+            width: 24, height: 24,
+            background: "transparent",
+            border: "none",
+            color: "var(--text-3)",
+            fontSize: 14,
+            cursor: "pointer",
+            lineHeight: 1,
+            opacity: 0.5,
+          }}
+        >
+          ×
+        </button>
+      </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{
           width: 44, height: 44, borderRadius: 14,
@@ -301,8 +323,32 @@ function NewHabitForm({ onCreate, onCancel }: {
 }
 
 export default function HabitsPage() {
-  const { habits, toggleHabit, createHabit, deleteHabit, loading } = useHabits();
+  const { habits, toggleHabit, createHabit, deleteHabit, updateHabit, loading } = useHabits();
   const [creating, setCreating] = useState(false);
+
+  const handleEdit = (h: HabitView) => {
+    const newTitle = window.prompt("Nuevo nombre del hábito:", h.name);
+    if (newTitle === null) return;
+    const cleanTitle = newTitle.trim();
+    if (!cleanTitle) return;
+
+    const newTarget = window.prompt("Cantidad objetivo (vacío = ninguna):", String(h.rawTargetValue ?? ""));
+    if (newTarget === null) return;
+    const parsedTarget = newTarget.trim() ? Number(newTarget) : null;
+    if (newTarget.trim() && !Number.isFinite(parsedTarget as number)) {
+      window.alert("Cantidad inválida.");
+      return;
+    }
+
+    const newUnit = window.prompt("Unidad (vacío = ninguna):", h.rawTargetUnit ?? "");
+    if (newUnit === null) return;
+
+    updateHabit(h.id, {
+      title: cleanTitle,
+      target_value: parsedTarget,
+      target_unit: newUnit.trim() || null,
+    });
+  };
   const week = buildWeekDates();
   const views = habits.map((h, i) => buildHabitView(h, i, week));
 
@@ -416,6 +462,7 @@ export default function HabitsPage() {
               habit={h}
               onToggle={() => toggleHabit(h.id)}
               onDelete={() => deleteHabit(h.id)}
+              onEdit={() => handleEdit(h)}
             />
           ))}
 

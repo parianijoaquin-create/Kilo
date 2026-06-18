@@ -52,12 +52,31 @@ export default function OnboardingPage() {
     setHydrated(true);
   }, [profile, hydrated]);
 
+  const currentYear = new Date().getFullYear();
+  const yearNum = parseInt(birthYear, 10);
+  const heightNum = parseFloat(heightCm);
+  const weightNum = parseFloat(weightKg);
+
+  const errors = {
+    displayName: !displayName.trim() ? "Necesitamos un nombre" : null,
+    birthYear: birthYear && (yearNum < 1900 || yearNum > currentYear - 10)
+      ? `Año entre 1900 y ${currentYear - 10}` : null,
+    heightCm: heightCm && (heightNum < 100 || heightNum > 250) ? "Altura entre 100 y 250 cm" : null,
+    weightKg: weightKg && (weightNum < 25 || weightNum > 300) ? "Peso entre 25 y 300 kg" : null,
+  };
+  const canFinish =
+    displayName.trim().length > 0 &&
+    !!birthYear && !errors.birthYear &&
+    !!heightCm && !errors.heightCm &&
+    !!weightKg && !errors.weightKg;
+
   async function handleFinish() {
+    if (!canFinish) return;
     setSaving(true);
     const birthDate = birthYear ? `${birthYear}-01-01` : undefined;
     const weight = weightKg ? parseFloat(weightKg) : NaN;
     const height = heightCm ? parseFloat(heightCm) : NaN;
-    const age = birthYear ? new Date().getFullYear() - parseInt(birthYear, 10) : NaN;
+    const age = birthYear ? currentYear - yearNum : NaN;
 
     let kcalTarget: number | undefined;
     let macros: { protein_g: number; carbs_g: number; fat_g: number } | undefined;
@@ -235,10 +254,19 @@ export default function OnboardingPage() {
             </div>
             <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
               <button onClick={() => setStep("goal")} style={secondaryBtn}>← Atrás</button>
-              <button onClick={handleFinish} disabled={saving} style={{ ...primaryBtn, flex: 1 }}>
+              <button
+                onClick={handleFinish}
+                disabled={saving || !canFinish}
+                style={{ ...primaryBtn, flex: 1, opacity: !canFinish || saving ? 0.5 : 1 }}
+              >
                 {saving ? "Guardando…" : "¡Arrancar! 🚀"}
               </button>
             </div>
+            {!canFinish && (
+              <div style={{ marginTop: 12, fontSize: 11.5, color: "var(--text-3)", textAlign: "center", lineHeight: 1.5 }}>
+                Completá nombre, año de nacimiento, altura y peso para arrancar.
+              </div>
+            )}
           </div>
         )}
       </div>

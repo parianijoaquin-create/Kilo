@@ -118,31 +118,86 @@ export function AddFoodSheet() {
 
   const fetchSeqRef = useRef(0);
 
-  const fetchFoods = useCallback(async (q: string) => {
+  const fetchFoods = useCallback(async (q: string, tab: Tab) => {
     const seq = ++fetchSeqRef.current;
     setLoading(true);
     setError(null);
-    const req = supabase
-      .from("foods")
-      .select("id, source_food_id, canonical_name, kcal_100g, protein_g_100g, carbs_g_100g, fat_g_100g, fiber_g_100g, default_portion_g, default_portion_name");
 
-    const { data, error: err } = await (q.length >= 2
-      ? req.ilike("canonical_name", `%${q}%`).limit(30)
-      : req.order("canonical_name").limit(20));
+    // If user is searching, always query the global foods catalog regardless of tab.
+    if (q.length >= 2) {
+      const { data, error: err } = await supabase
+        .from("foods")
+        .select("id, source_food_id, canonical_name, kcal_100g, protein_g_100g, carbs_g_100g, fat_g_100g, fiber_g_100g, default_portion_g, default_portion_name")
+        .ilike("canonical_name", `%${q}%`)
+        .limit(30);
+      if (seq !== fetchSeqRef.current) return;
+      setFoods((data as FoodSearchResult[]) ?? []);
+      setError(err?.message ?? null);
+      setLoading(false);
+      return;
+    }
 
-    // Discard if a newer fetch was started while we were waiting
+    if (tab === "Frecuentes" || tab === "Recientes") {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        if (seq !== fetchSeqRef.current) return;
+        setFoods([]); setLoading(false); return;
+      }
+
+      // Fetch recent meal_items for this user (RLS narrows by ownership). Cap at 200 for grouping.
+      const { data: items, error: err } = await supabase
+        .from("meal_items")
+        .select(`
+          food_id, created_at,
+          foods!inner ( id, source_food_id, canonical_name, kcal_100g, protein_g_100g, carbs_g_100g, fat_g_100g, fiber_g_100g, default_portion_g, default_portion_name )
+        `)
+        .not("food_id", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      if (seq !== fetchSeqRef.current) return;
+
+      type Row = { food_id: number; created_at: string; foods: FoodSearchResult };
+      const rows = (items ?? []) as unknown as Row[];
+
+      if (tab === "Recientes") {
+        const seen = new Set<number>();
+        const deduped: FoodSearchResult[] = [];
+        for (const r of rows) {
+          if (!r.foods || seen.has(r.food_id)) continue;
+          seen.add(r.food_id);
+          deduped.push(r.foods);
+          if (deduped.length >= 30) break;
+        }
+        setFoods(deduped);
+      } else {
+        const counts = new Map<number, { count: number; food: FoodSearchResult }>();
+        for (const r of rows) {
+          if (!r.foods) continue;
+          const entry = counts.get(r.food_id);
+          if (entry) entry.count++;
+          else counts.set(r.food_id, { count: 1, food: r.foods });
+        }
+        const sorted = [...counts.values()].sort((a, b) => b.count - a.count).slice(0, 30).map((e) => e.food);
+        setFoods(sorted);
+      }
+
+      setError(err?.message ?? null);
+      setLoading(false);
+      return;
+    }
+
+    // Mis recetas → not implemented yet
     if (seq !== fetchSeqRef.current) return;
-
-    setFoods((data as FoodSearchResult[]) ?? []);
-    setError(err?.message ?? null);
+    setFoods([]);
     setLoading(false);
   }, []);
 
   useEffect(() => {
     if (!isOpen) return;
-    const t = setTimeout(() => fetchFoods(query), query.length >= 2 ? 200 : 0);
+    const t = setTimeout(() => fetchFoods(query, activeTab), query.length >= 2 ? 200 : 0);
     return () => clearTimeout(t);
-  }, [query, isOpen, fetchFoods]);
+  }, [query, isOpen, activeTab, fetchFoods]);
 
   // Reset state when sheet opens
   useEffect(() => {
@@ -154,6 +209,8 @@ export function AddFoodSheet() {
       setScannerStatus("idle");
       setScannerMessage(null);
       setManualBarcode("");
+      setPendingFood(null);
+      setPortionGrams("");
     }
   }, [isOpen]);
 
@@ -269,16 +326,174 @@ export function AddFoodSheet() {
     }
   }, [lookupBarcode, stopScanner]);
 
-  async function handleAdd(food: FoodSearchResult) {
-    if (!addItemFn || !mealId || adding) return;
+  const [pendingFood, setPendingFood] = useState<FoodSearchResult | null>(null);
+  const [portionGrams, setPortionGrams] = useState<string>("");
+
+  function openPortionPicker(food: FoodSearchResult) {
+    setPendingFood(food);
+    setPortionGrams(String(food.default_portion_g ?? 100));
+  }
+
+  async function confirmPortion() {
+    if (!addItemFn || !mealId || adding || !pendingFood) return;
+    const grams = Number(portionGrams);
+    if (!Number.isFinite(grams) || grams <= 0) return;
     setAdding(true);
-    await addItemFn(food, mealId);
+    await addItemFn(pendingFood, mealId, grams);
     setAdding(false);
+    setPendingFood(null);
     closeSheet();
   }
 
   return (
     <Sheet open={isOpen} onClose={closeSheet} height="82%">
+      {pendingFood && (() => {
+        const grams = Number(portionGrams) || 0;
+        const f = grams / 100;
+        const kcal = Math.round((pendingFood.kcal_100g ?? 0) * f);
+        const p = Math.round((pendingFood.protein_g_100g ?? 0) * f * 10) / 10;
+        const c = Math.round((pendingFood.carbs_g_100g  ?? 0) * f * 10) / 10;
+        const g = Math.round((pendingFood.fat_g_100g    ?? 0) * f * 10) / 10;
+        return (
+          <div style={{
+            position: "absolute", inset: 0, zIndex: 10,
+            background: "var(--bg-0)",
+            padding: "20px 20px 24px",
+            display: "flex", flexDirection: "column",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{
+                fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 500,
+                letterSpacing: "-0.02em", color: "var(--text-1)",
+              }}>
+                ¿Cuánto comiste?
+              </div>
+              <button
+                onClick={() => setPendingFood(null)}
+                style={{
+                  width: 32, height: 32, borderRadius: 10,
+                  background: "var(--bg-2)", border: "none", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <IconClose size={16} color="var(--text-2)" />
+              </button>
+            </div>
+
+            <div style={{ marginTop: 16, fontSize: 13.5, fontWeight: 500, color: "var(--text-1)" }}>
+              {pendingFood.canonical_name}
+            </div>
+            {pendingFood.default_portion_name && (
+              <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2, fontFamily: "var(--font-mono)" }}>
+                Porción de ref: {pendingFood.default_portion_name} ({pendingFood.default_portion_g ?? 100}g)
+              </div>
+            )}
+
+            <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 10 }}>
+              <button
+                onClick={() => setPortionGrams(String(Math.max(0, grams - 10)))}
+                style={{
+                  width: 44, height: 44, borderRadius: 12,
+                  background: "var(--bg-2)", border: "1px solid var(--line-2)",
+                  color: "var(--text-1)", fontSize: 18, cursor: "pointer",
+                }}
+              >−</button>
+              <input
+                value={portionGrams}
+                onChange={(e) => setPortionGrams(e.target.value.replace(/[^\d.]/g, ""))}
+                inputMode="decimal"
+                style={{
+                  flex: 1, height: 44, textAlign: "center",
+                  background: "var(--bg-2)", border: "1px solid var(--line-2)",
+                  borderRadius: 12, color: "var(--text-1)",
+                  fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 600,
+                  outline: "none",
+                }}
+              />
+              <button
+                onClick={() => setPortionGrams(String(grams + 10))}
+                style={{
+                  width: 44, height: 44, borderRadius: 12,
+                  background: "var(--bg-2)", border: "1px solid var(--line-2)",
+                  color: "var(--text-1)", fontSize: 18, cursor: "pointer",
+                }}
+              >+</button>
+              <span style={{ fontSize: 13, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>g</span>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+              {[50, 100, 150, 200, 250].map((preset) => (
+                <button
+                  key={preset}
+                  onClick={() => setPortionGrams(String(preset))}
+                  style={{
+                    padding: "6px 12px", borderRadius: 8,
+                    background: grams === preset ? "var(--lime)" : "var(--bg-2)",
+                    border: "1px solid var(--line-2)",
+                    color: grams === preset ? "#0a0d15" : "var(--text-2)",
+                    fontSize: 11, fontFamily: "var(--font-mono)", cursor: "pointer",
+                    fontWeight: 600,
+                  }}
+                >
+                  {preset}g
+                </button>
+              ))}
+            </div>
+
+            <div style={{
+              marginTop: 20, padding: 14,
+              background: "var(--bg-1)", border: "1px solid var(--line-1)",
+              borderRadius: 14, display: "flex", justifyContent: "space-between", alignItems: "center",
+            }}>
+              <div>
+                <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.05em", textTransform: "uppercase", fontFamily: "var(--font-mono)" }}>
+                  Total
+                </div>
+                <div style={{
+                  fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 500,
+                  color: "var(--lime)", letterSpacing: "-0.03em", lineHeight: 1, marginTop: 4,
+                }}>
+                  {kcal}<span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 400 }}> kcal</span>
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)" }}>
+                  <span style={{ color: "var(--lime)", fontWeight: 700 }}>P</span> {p}g
+                </span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)" }}>
+                  <span style={{ color: "var(--blue)", fontWeight: 700 }}>C</span> {c}g
+                </span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)" }}>
+                  <span style={{ color: "var(--orange)", fontWeight: 700 }}>G</span> {g}g
+                </span>
+              </div>
+            </div>
+
+            <div style={{ marginTop: "auto", display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setPendingFood(null)}
+                style={{
+                  flex: 1, height: 48, borderRadius: 14,
+                  background: "var(--bg-2)", border: "1px solid var(--line-2)",
+                  color: "var(--text-2)", fontSize: 13.5, fontWeight: 500, cursor: "pointer",
+                }}
+              >Cancelar</button>
+              <button
+                onClick={confirmPortion}
+                disabled={adding || grams <= 0}
+                style={{
+                  flex: 2, height: 48, borderRadius: 14,
+                  background: "var(--lime)", border: "none",
+                  color: "#0a0d15", fontSize: 13.5, fontWeight: 700,
+                  cursor: adding || grams <= 0 ? "default" : "pointer",
+                  opacity: adding || grams <= 0 ? 0.5 : 1,
+                }}
+              >{adding ? "Agregando…" : `Agregar ${grams}g`}</button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Header */}
       <div style={{
         display: "flex",
@@ -369,7 +584,8 @@ export function AddFoodSheet() {
               }
               stopScanner();
               setScannerMode("idle");
-              photoInputRef.current?.click();
+              setScannerStatus("error");
+              setScannerMessage("La identificación por foto llega pronto. Mientras tanto buscala manualmente o escaneá el código.");
             }}
             disabled={adding || scannerStatus === "requesting" || scannerStatus === "lookup"}
             style={{
@@ -587,7 +803,7 @@ export function AddFoodSheet() {
           </div>
         ) : foods.length > 0 ? (
           foods.map((food) => (
-            <FoodRow key={food.id} food={food} onAdd={handleAdd} />
+            <FoodRow key={food.id} food={food} onAdd={openPortionPicker} />
           ))
         ) : (
           <div style={{
@@ -600,12 +816,16 @@ export function AddFoodSheet() {
           }}>
             <div style={{ fontSize: 36 }}>🔍</div>
             <div style={{ fontSize: 13.5, color: "var(--text-3)", textAlign: "center" }}>
-              {query.length >= 2
-                ? `No encontramos "${query}"`
+              {query.length >= 2 ? `No encontramos "${query}"`
+                : activeTab === "Frecuentes" ? "Todavía no tenés alimentos frecuentes"
+                : activeTab === "Recientes" ? "Aún no registraste comidas"
+                : activeTab === "Mis recetas" ? "Las recetas llegan pronto"
                 : "No hay alimentos disponibles"}
             </div>
             <div style={{ fontSize: 12, color: "var(--text-3)", opacity: 0.6 }}>
-              Probá otro nombre o escanéalo
+              {activeTab === "Mis recetas"
+                ? "Próximamente vas a poder armar combinaciones."
+                : "Buscá por nombre o escaneá un código."}
             </div>
           </div>
         )}

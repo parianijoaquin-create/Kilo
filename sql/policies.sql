@@ -191,4 +191,24 @@ create policy "weight_logs_delete_own"
   on public.weight_logs for delete to authenticated
 using (user_id = auth.uid());
 
+-- ─── water_logs ───────────────────────────────────────────────────────────────
+
+alter table public.water_logs enable row level security;
+
+drop policy if exists "water_logs_select_own" on public.water_logs;
+create policy "water_logs_select_own"
+  on public.water_logs for select to authenticated
+using (user_id = auth.uid());
+
+drop policy if exists "water_logs_insert_own" on public.water_logs;
+create policy "water_logs_insert_own"
+  on public.water_logs for insert to authenticated
+with check (user_id = auth.uid());
+
+drop policy if exists "water_logs_update_own" on public.water_logs;
+create policy "water_logs_update_own"
+  on public.water_logs for update to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
 -- audit: sin políticas de cliente => acceso sólo desde backend/service_role

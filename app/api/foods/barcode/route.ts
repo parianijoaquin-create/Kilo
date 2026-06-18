@@ -26,6 +26,20 @@ interface OpenFoodFactsResponse {
 
 const OFF_SOURCE_CODE = "open_food_facts";
 
+// Simple per-user rate limit: max 30 lookups per minute.
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX = 30;
+const rateBuckets = new Map<string, number[]>();
+
+function checkRate(userId: string) {
+  const now = Date.now();
+  const recent = (rateBuckets.get(userId) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT_MAX) return false;
+  recent.push(now);
+  rateBuckets.set(userId, recent);
+  return true;
+}
+
 function numberFrom(value: number | string | undefined) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value !== "string") return null;
@@ -83,6 +97,13 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await userClient.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+
+  if (!checkRate(user.id)) {
+    return NextResponse.json(
+      { error: "Demasiados escaneos seguidos. Esperá un momento." },
+      { status: 429 }
+    );
   }
 
   const barcode = request.nextUrl.searchParams.get("barcode")?.replace(/\D/g, "") ?? "";

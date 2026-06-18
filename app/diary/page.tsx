@@ -10,6 +10,7 @@ import { IconSearch, IconPlus, IconDroplet } from "@/components/icons";
 import { useDiary, type DiaryMeal, type DiaryItem } from "@/hooks/useDiary";
 import { useProfile } from "@/hooks/useProfile";
 import { useToday } from "@/hooks/useToday";
+import { useWater } from "@/hooks/useWater";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
 
 const STANDARD_MEALS = ["morning", "lunch", "snack", "dinner"] as const;
@@ -34,7 +35,13 @@ function buildDateStrip() {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(now);
     d.setDate(now.getDate() - 5 + i);
-    return { d: DAY_LABELS[d.getDay()], n: d.getDate(), today: i === 5, future: i > 5 };
+    return {
+      d: DAY_LABELS[d.getDay()],
+      n: d.getDate(),
+      iso: d.toISOString().split("T")[0],
+      today: i === 5,
+      future: i > 5,
+    };
   });
 }
 
@@ -226,20 +233,22 @@ function MealSection({
 export default function DiaryPage() {
   const { openSheet } = useSheet();
   const today = useToday();
-  const { meals, totals, addMealItem, deleteMealItem } = useDiary(today);
+  const [selectedDate, setSelectedDate] = useState(today);
+  const isToday = selectedDate === today;
+  const { meals, totals, addMealItem, deleteMealItem } = useDiary(selectedDate);
+  const { glasses: water, setWater } = useWater(selectedDate);
   const { profile } = useProfile();
-  const DATE_STRIP = useMemo(() => buildDateStrip(), []);
+  const DATE_STRIP = useMemo(() => buildDateStrip(), [today]);
 
   const kcalGoal    = profile?.daily_target_kcal ?? 2000;
   const proteinGoal = profile?.protein_target_g  ?? 150;
   const carbsGoal   = profile?.carbs_target_g    ?? 200;
   const fatGoal     = profile?.fat_target_g      ?? 65;
 
-  const [water, setWater] = useState(0);
   const waterGoal = 8;
 
-  const addFoodToMeal = useCallback(async (food: FoodSearchResult, mealType: string) => {
-    const grams = food.default_portion_g ?? 100;
+  const addFoodToMeal = useCallback(async (food: FoodSearchResult, mealType: string, gramsOverride?: number) => {
+    const grams = gramsOverride ?? food.default_portion_g ?? 100;
     const f = grams / 100;
     return addMealItem(mealType, {
       food_id: food.id,
@@ -300,38 +309,54 @@ export default function DiaryPage() {
 
           {/* Date strip */}
           <div style={{ marginTop: 16, display: "flex", gap: 6, overflowX: "auto" }}>
-            {DATE_STRIP.map((day) => (
-              <div
-                key={day.n}
-                className="kilo-pressable"
-                style={{
-                  flex: "1 0 0",
-                  padding: "8px 0",
-                  borderRadius: 12,
-                  background: day.today ? "var(--lime)" : "var(--bg-1)",
-                  border: day.today ? "none" : "1px solid var(--line-1)",
-                  color: day.today ? "#0a0d15" : day.future ? "var(--text-3)" : "var(--text-2)",
-                  textAlign: "center",
-                  cursor: "pointer",
-                  opacity: day.future ? 0.5 : 1,
-                }}
-              >
-                <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.02em", textTransform: "uppercase" }}>
-                  {day.d}
-                </div>
-                <div style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: 17,
-                  fontWeight: 600,
-                  letterSpacing: "-0.02em",
-                  marginTop: 2,
-                  lineHeight: 1,
-                }}>
-                  {day.n}
-                </div>
-              </div>
-            ))}
+            {DATE_STRIP.map((day) => {
+              const isSelected = day.iso === selectedDate;
+              return (
+                <button
+                  key={day.iso}
+                  onClick={() => !day.future && setSelectedDate(day.iso)}
+                  disabled={day.future}
+                  className="kilo-pressable"
+                  style={{
+                    flex: "1 0 0",
+                    padding: "8px 0",
+                    borderRadius: 12,
+                    background: isSelected ? "var(--lime)" : "var(--bg-1)",
+                    border: isSelected ? "none" : "1px solid var(--line-1)",
+                    color: isSelected ? "#0a0d15" : day.future ? "var(--text-3)" : "var(--text-2)",
+                    textAlign: "center",
+                    cursor: day.future ? "default" : "pointer",
+                    opacity: day.future ? 0.5 : 1,
+                  }}
+                >
+                  <div style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.02em", textTransform: "uppercase" }}>
+                    {day.d}
+                  </div>
+                  <div style={{
+                    fontFamily: "var(--font-display)",
+                    fontSize: 17,
+                    fontWeight: 600,
+                    letterSpacing: "-0.02em",
+                    marginTop: 2,
+                    lineHeight: 1,
+                  }}>
+                    {day.n}
+                  </div>
+                </button>
+              );
+            })}
           </div>
+          {!isToday && (
+            <div style={{
+              marginTop: 8, textAlign: "center", fontSize: 11,
+              color: "var(--text-3)", fontFamily: "var(--font-mono)",
+            }}>
+              Viendo {selectedDate} · <button
+                onClick={() => setSelectedDate(today)}
+                style={{ background: "none", border: "none", color: "var(--lime)", cursor: "pointer", fontSize: 11, fontFamily: "var(--font-mono)" }}
+              >Volver a hoy</button>
+            </div>
+          )}
 
           {/* Day totals */}
           <div style={{

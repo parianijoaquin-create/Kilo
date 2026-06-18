@@ -208,6 +208,22 @@ create table if not exists public.weight_logs (
 
 create index if not exists weight_logs_user_date_idx on public.weight_logs(user_id, logged_at desc);
 
+-- ─── Water logs ───────────────────────────────────────────────────────────────
+
+create table if not exists public.water_logs (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  log_date date not null,
+  glasses int not null default 0 check (glasses >= 0 and glasses <= 50),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, log_date)
+);
+
+create index if not exists water_logs_user_date_idx on public.water_logs(user_id, log_date desc);
+
+drop trigger if exists water_logs_updated_at on public.water_logs;
+create trigger water_logs_updated_at before update on public.water_logs
+  for each row execute function public.set_updated_at();
+
 -- ─── Audit log ────────────────────────────────────────────────────────────────
 
 create table if not exists public.audit (
