@@ -34,6 +34,10 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "Kilo",
   },
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    shortcut: "/icon.svg",
+  },
 };
 
 export const viewport: Viewport = {
@@ -42,6 +46,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   themeColor: "#06090F",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

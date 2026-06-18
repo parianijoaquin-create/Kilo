@@ -215,13 +215,21 @@ function HabitCard({ habit, onToggle, onDelete, onEdit }: { habit: HabitView; on
   );
 }
 
-function NewHabitForm({ onCreate, onCancel }: {
-  onCreate: (data: { title: string; code: string; target_value?: number; target_unit?: string }) => Promise<{ error: string | null }>;
+interface HabitFormValues {
+  title: string;
+  target_value?: number;
+  target_unit?: string;
+}
+
+function HabitForm({ mode, initial, onSubmit, onCancel }: {
+  mode: "create" | "edit";
+  initial?: { title?: string; target_value?: number | null; target_unit?: string | null };
+  onSubmit: (data: HabitFormValues) => Promise<{ error: string | null }>;
   onCancel: () => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [target, setTarget] = useState("");
-  const [unit, setUnit] = useState("");
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [target, setTarget] = useState(initial?.target_value != null ? String(initial.target_value) : "");
+  const [unit, setUnit] = useState(initial?.target_unit ?? "");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -230,9 +238,8 @@ function NewHabitForm({ onCreate, onCancel }: {
     if (!title.trim()) return;
     setSaving(true);
     setErrorMsg(null);
-    const { error } = await onCreate({
+    const { error } = await onSubmit({
       title: title.trim(),
-      code: title.trim().toLowerCase().replace(/\s+/g, "_").slice(0, 32),
       target_value: target ? Number(target) : undefined,
       target_unit: unit.trim() || undefined,
     });
@@ -288,7 +295,7 @@ function NewHabitForm({ onCreate, onCancel }: {
             opacity: saving || !title.trim() ? 0.55 : 1,
           }}
         >
-          {saving ? "Guardando…" : "Crear"}
+          {saving ? "Guardando…" : mode === "edit" ? "Guardar cambios" : "Crear"}
         </button>
         <button
           type="button"
@@ -325,30 +332,7 @@ function NewHabitForm({ onCreate, onCancel }: {
 export default function HabitsPage() {
   const { habits, toggleHabit, createHabit, deleteHabit, updateHabit, loading } = useHabits();
   const [creating, setCreating] = useState(false);
-
-  const handleEdit = (h: HabitView) => {
-    const newTitle = window.prompt("Nuevo nombre del hábito:", h.name);
-    if (newTitle === null) return;
-    const cleanTitle = newTitle.trim();
-    if (!cleanTitle) return;
-
-    const newTarget = window.prompt("Cantidad objetivo (vacío = ninguna):", String(h.rawTargetValue ?? ""));
-    if (newTarget === null) return;
-    const parsedTarget = newTarget.trim() ? Number(newTarget) : null;
-    if (newTarget.trim() && !Number.isFinite(parsedTarget as number)) {
-      window.alert("Cantidad inválida.");
-      return;
-    }
-
-    const newUnit = window.prompt("Unidad (vacío = ninguna):", h.rawTargetUnit ?? "");
-    if (newUnit === null) return;
-
-    updateHabit(h.id, {
-      title: cleanTitle,
-      target_value: parsedTarget,
-      target_unit: newUnit.trim() || null,
-    });
-  };
+  const [editingId, setEditingId] = useState<string | null>(null);
   const week = buildWeekDates();
   const views = habits.map((h, i) => buildHabitView(h, i, week));
 
@@ -456,20 +440,43 @@ export default function HabitsPage() {
         {/* Habit cards */}
         <SectionHead title="Tus hábitos" />
         <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {views.map((h) => (
-            <HabitCard
-              key={h.id}
-              habit={h}
-              onToggle={() => toggleHabit(h.id)}
-              onDelete={() => deleteHabit(h.id)}
-              onEdit={() => handleEdit(h)}
-            />
-          ))}
+          {views.map((h) =>
+            editingId === h.id ? (
+              <HabitForm
+                key={h.id}
+                mode="edit"
+                initial={{ title: h.name, target_value: h.rawTargetValue, target_unit: h.rawTargetUnit }}
+                onSubmit={async (data) => {
+                  const res = await updateHabit(h.id, {
+                    title: data.title,
+                    target_value: data.target_value ?? null,
+                    target_unit: data.target_unit ?? null,
+                  });
+                  if (!res.error) setEditingId(null);
+                  return res;
+                }}
+                onCancel={() => setEditingId(null)}
+              />
+            ) : (
+              <HabitCard
+                key={h.id}
+                habit={h}
+                onToggle={() => toggleHabit(h.id)}
+                onDelete={() => deleteHabit(h.id)}
+                onEdit={() => setEditingId(h.id)}
+              />
+            )
+          )}
 
           {creating ? (
-            <NewHabitForm
-              onCreate={async (data) => {
-                const res = await createHabit({ ...data, frequency: "daily" });
+            <HabitForm
+              mode="create"
+              onSubmit={async (data) => {
+                const res = await createHabit({
+                  ...data,
+                  code: data.title.toLowerCase().replace(/\s+/g, "_").slice(0, 32),
+                  frequency: "daily",
+                });
                 if (!res.error) setCreating(false);
                 return res;
               }}
