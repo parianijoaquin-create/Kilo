@@ -98,8 +98,20 @@ function buildHabitView(habit: Habit, indexInList: number, week: Date[]): HabitV
   };
 }
 
+function milestoneFor(streak: number): { label: string; emoji: string } | null {
+  if (streak >= 365) return { label: "1 año",     emoji: "🏆" };
+  if (streak >= 180) return { label: "6 meses",   emoji: "👑" };
+  if (streak >= 90)  return { label: "90 días",   emoji: "💎" };
+  if (streak >= 60)  return { label: "2 meses",   emoji: "⭐⭐" };
+  if (streak >= 30)  return { label: "1 mes",     emoji: "⭐" };
+  if (streak >= 14)  return { label: "2 semanas", emoji: "🔥🔥" };
+  if (streak >= 7)   return { label: "1 semana",  emoji: "🔥" };
+  return null;
+}
+
 function HabitCard({ habit, onToggle, onDelete, onEdit }: { habit: HabitView; onToggle: () => void; onDelete: () => void; onEdit: () => void }) {
   const { palette, Icon } = habit;
+  const milestone = milestoneFor(habit.streak);
   const gradBg = habit.doneToday
     ? `linear-gradient(140deg, ${palette.bg.replace("0.15", "0.06").replace("0.18", "0.06")} 0%, var(--bg-1) 60%)`
     : "var(--bg-1)";
@@ -156,8 +168,21 @@ function HabitCard({ habit, onToggle, onDelete, onEdit }: { habit: HabitView; on
           <Icon size={22} color={palette.c} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500, letterSpacing: "-0.02em", color: "var(--text-1)" }}>
-            {habit.name}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500, letterSpacing: "-0.02em", color: "var(--text-1)" }}>
+              {habit.name}
+            </div>
+            {milestone && (
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 3,
+                padding: "2px 7px",
+                background: `${palette.c}22`, border: `0.5px solid ${palette.c}55`,
+                borderRadius: 100, fontSize: 9.5, fontWeight: 700,
+                color: palette.c, fontFamily: "var(--font-mono)", letterSpacing: "0.02em",
+              }}>
+                {milestone.emoji} {milestone.label}
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 2 }}>{habit.dose}</div>
         </div>

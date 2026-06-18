@@ -191,6 +191,50 @@ create policy "weight_logs_delete_own"
   on public.weight_logs for delete to authenticated
 using (user_id = auth.uid());
 
+-- ─── reminders ────────────────────────────────────────────────────────────────
+
+alter table public.reminders enable row level security;
+
+drop policy if exists "reminders_select_own" on public.reminders;
+create policy "reminders_select_own"
+  on public.reminders for select to authenticated
+using (user_id = auth.uid());
+
+drop policy if exists "reminders_insert_own" on public.reminders;
+create policy "reminders_insert_own"
+  on public.reminders for insert to authenticated
+with check (user_id = auth.uid());
+
+drop policy if exists "reminders_update_own" on public.reminders;
+create policy "reminders_update_own"
+  on public.reminders for update to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+drop policy if exists "reminders_delete_own" on public.reminders;
+create policy "reminders_delete_own"
+  on public.reminders for delete to authenticated
+using (user_id = auth.uid());
+
+-- ─── push_subscriptions ───────────────────────────────────────────────────────
+
+alter table public.push_subscriptions enable row level security;
+
+drop policy if exists "push_subscriptions_select_own" on public.push_subscriptions;
+create policy "push_subscriptions_select_own"
+  on public.push_subscriptions for select to authenticated
+using (user_id = auth.uid());
+
+drop policy if exists "push_subscriptions_insert_own" on public.push_subscriptions;
+create policy "push_subscriptions_insert_own"
+  on public.push_subscriptions for insert to authenticated
+with check (user_id = auth.uid());
+
+drop policy if exists "push_subscriptions_delete_own" on public.push_subscriptions;
+create policy "push_subscriptions_delete_own"
+  on public.push_subscriptions for delete to authenticated
+using (user_id = auth.uid());
+
 -- ─── water_logs ───────────────────────────────────────────────────────────────
 
 alter table public.water_logs enable row level security;

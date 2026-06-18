@@ -267,18 +267,18 @@ export default function ProfilePage() {
         <div style={{ padding: "0 20px" }}>
           <div style={{ background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 18, overflow: "hidden" }}>
             {settingsRows.map((r, i) => {
-              const isGoals = i === 0;
+              const href = i === 0 ? "/onboarding" : i === 1 ? "/profile/reminders" : null;
               return (
                 <button
                   key={r.label}
-                  onClick={isGoals ? () => router.push("/onboarding") : undefined}
+                  onClick={href ? () => router.push(href) : undefined}
                   style={{
                     display: "flex", alignItems: "center", gap: 14,
                     padding: "14px 16px", width: "100%",
                     background: "none", border: "none",
                     borderBottom: i < settingsRows.length - 1 ? "0.5px solid var(--line-1)" : "none",
-                    cursor: isGoals ? "pointer" : "default",
-                    opacity: isGoals ? 1 : 0.5,
+                    cursor: href ? "pointer" : "default",
+                    opacity: href ? 1 : 0.5,
                     textAlign: "left",
                     minHeight: 44,
                   }}

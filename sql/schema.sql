@@ -224,6 +224,41 @@ drop trigger if exists water_logs_updated_at on public.water_logs;
 create trigger water_logs_updated_at before update on public.water_logs
   for each row execute function public.set_updated_at();
 
+-- ─── Reminders ────────────────────────────────────────────────────────────────
+
+create table if not exists public.reminders (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  kind text not null check (kind in ('meal','water','habit','weight','custom')),
+  label text not null,
+  time_of_day time not null,
+  days_of_week int[] not null default '{1,2,3,4,5,6,7}',
+  enabled boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists reminders_user_idx on public.reminders(user_id, enabled);
+
+drop trigger if exists reminders_updated_at on public.reminders;
+create trigger reminders_updated_at before update on public.reminders
+  for each row execute function public.set_updated_at();
+
+-- ─── Push subscriptions ───────────────────────────────────────────────────────
+
+create table if not exists public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  user_agent text,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz
+);
+
+create index if not exists push_subscriptions_user_idx on public.push_subscriptions(user_id);
+
 -- ─── Audit log ────────────────────────────────────────────────────────────────
 
 create table if not exists public.audit (
