@@ -42,7 +42,7 @@ function buildDateStrip() {
     return {
       d: DAY_LABELS[d.getDay()],
       n: d.getDate(),
-      iso: d.toISOString().split("T")[0],
+      iso: d.toLocaleDateString("en-CA"), // local, no UTC
       today: i === 5,
       future: i > 5,
     };
@@ -239,7 +239,8 @@ export default function DiaryPage() {
   const carbsGoal   = profile?.carbs_target_g    ?? 200;
   const fatGoal     = profile?.fat_target_g      ?? 65;
 
-  const waterGoal = 8;
+  const waterGoal = 8; // vasos visibles por ciclo
+  const waterMax = 16; // máximo diario
 
   const addFoodToMeal = useCallback(async (food: FoodSearchResult, mealType: string, gramsOverride?: number) => {
     const grams = gramsOverride ?? food.default_portion_g ?? 100;
@@ -477,10 +478,20 @@ export default function DiaryPage() {
                 Agua
               </span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)" }}>
-                <span style={{ color: "var(--blue)", fontWeight: 600 }}>{water}</span>/{waterGoal} vasos
+                <span style={{ color: "var(--blue)", fontWeight: 600 }}>{water}</span>/{waterMax} vasos
               </span>
             </div>
-            <WaterGlasses goal={waterGoal} filled={water} onChange={setWater} />
+            <SwipeToDelete
+              collapse={false}
+              radius={12}
+              label="Quitar"
+              disabled={water === 0}
+              onDelete={() => setWater(Math.max(0, water - 1))}
+            >
+              <div style={{ background: "var(--bg-1)" }}>
+                <WaterGlasses goal={waterGoal} filled={water} max={waterMax} onChange={setWater} />
+              </div>
+            </SwipeToDelete>
           </div>
         </div>
 

@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 
 function todayStr() {
-  return new Date().toISOString().split("T")[0];
+  // Fecha local (no UTC). "en-CA" formatea como YYYY-MM-DD.
+  return new Date().toLocaleDateString("en-CA");
 }
 
 function msUntilNextMidnight() {

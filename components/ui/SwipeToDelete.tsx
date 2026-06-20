@@ -18,6 +18,12 @@ interface SwipeToDeleteProps {
   label?: string;
   /** Disable the gesture (e.g. while the row is in edit mode). */
   disabled?: boolean;
+  /**
+   * When true (default) the row collapses and slides away on delete.
+   * When false the action just fires and the row springs back, so the same
+   * gesture can be used repeatedly (e.g. removing one water glass at a time).
+   */
+  collapse?: boolean;
 }
 
 export function SwipeToDelete({
@@ -26,6 +32,7 @@ export function SwipeToDelete({
   radius = 20,
   label = "Eliminar",
   disabled = false,
+  collapse = true,
 }: SwipeToDeleteProps) {
   const [dx, setDx] = useState(0);
   const [armed, setArmed] = useState(false);
@@ -41,6 +48,13 @@ export function SwipeToDelete({
   const triggerDelete = useCallback(() => {
     if (removing) return;
     haptic("delete");
+    if (!collapse) {
+      // Action mode: fire and spring back so the gesture can repeat.
+      onDelete();
+      setArmed(false);
+      setDx(0);
+      return;
+    }
     setHeight(wrapRef.current?.offsetHeight);
     // next frame: collapse
     requestAnimationFrame(() => {
@@ -48,7 +62,7 @@ export function SwipeToDelete({
       setDx(-window.innerWidth);
     });
     window.setTimeout(onDelete, 240);
-  }, [onDelete, removing]);
+  }, [onDelete, removing, collapse]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (disabled || removing) return;

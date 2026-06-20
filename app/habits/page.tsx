@@ -44,7 +44,8 @@ function weekIndex(d: Date) {
 }
 
 function ymd(d: Date) {
-  return d.toISOString().split("T")[0];
+  // Fecha local (no UTC) para no adelantar el día a la noche en zonas UTC-.
+  return d.toLocaleDateString("en-CA");
 }
 
 function buildWeekDates() {

@@ -2,23 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerSupabase } from "@/lib/supabase/server";
 import { GoogleGenAI, Type } from "@google/genai";
+import { consumeRateLimit } from "@/lib/rateLimit";
 
 const AI_SOURCE_CODE = "ai_vision";
 const GEMINI_MODEL = "gemini-2.5-flash";
 
-// Simple per-user rate limit: max 15 photo analyses per minute.
-const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+// Per-user rate limit: máx 15 análisis de foto por minuto (persistente en DB).
 const RATE_LIMIT_MAX = 15;
-const rateBuckets = new Map<string, number[]>();
-
-function checkRate(userId: string) {
-  const now = Date.now();
-  const recent = (rateBuckets.get(userId) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  if (recent.length >= RATE_LIMIT_MAX) return false;
-  recent.push(now);
-  rateBuckets.set(userId, recent);
-  return true;
-}
 
 const ALLOWED_MEDIA = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_BYTES = 6 * 1024 * 1024; // 6MB
@@ -122,7 +112,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!checkRate(user.id)) {
+  if (!(await consumeRateLimit(userClient, user.id, "food_photo", RATE_LIMIT_MAX))) {
     return NextResponse.json(
       { error: "Demasiadas fotos seguidas. Esperá un momento." },
       { status: 429 }

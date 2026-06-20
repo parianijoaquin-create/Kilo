@@ -4,30 +4,41 @@ import { useEffect, useRef, useState } from "react";
 import { haptic } from "@/lib/haptics";
 
 interface WaterGlassesProps {
-  /** Number of glasses to show (the goal). */
+  /** Number of glasses to show per cycle. */
   goal: number;
-  /** How many are currently filled. */
+  /** How many glasses have been drunk in total (0..max). */
   filled: number;
-  /** Called with the new filled count when a glass is tapped. */
+  /** Absolute maximum number of glasses. */
+  max: number;
+  /** Called with the new total count when a glass is tapped. */
   onChange: (next: number) => void;
 }
 
 // Cup outline (narrower at the bottom), used both as the glass and the water clip.
 const CUP_CLIP = "polygon(16% 0, 84% 0, 73% 100%, 27% 100%)";
 
-export function WaterGlasses({ goal, filled, onChange }: WaterGlassesProps) {
+export function WaterGlasses({ goal, filled, max, onChange }: WaterGlassesProps) {
   const [splash, setSplash] = useState<number | null>(null);
   const prevFilled = useRef(filled);
 
+  // Glasses already finished as full cycles (these reset the row to empty).
+  const completedCycles = Math.floor(filled / goal);
+  // How many cups are filled in the current row (a completed cycle shows empty).
+  const visibleFilled = filled - completedCycles * goal;
+
   useEffect(() => {
-    if (filled > prevFilled.current && filled >= goal) {
-      haptic("success"); // reached the daily goal
+    // Buzz on every completed cycle (e.g. 8 and 16 glasses).
+    if (filled > prevFilled.current && filled % goal === 0) {
+      haptic("success");
     }
     prevFilled.current = filled;
   }, [filled, goal]);
 
   function handleTap(i: number) {
-    const next = i + 1 === filled ? i : i + 1;
+    const next =
+      i + 1 === visibleFilled
+        ? completedCycles * goal + i // tap the last filled cup to remove it
+        : Math.min(completedCycles * goal + i + 1, max);
     if (next > filled) {
       setSplash(i);
       setTimeout(() => setSplash((s) => (s === i ? null : s)), 450);
@@ -39,7 +50,7 @@ export function WaterGlasses({ goal, filled, onChange }: WaterGlassesProps) {
   return (
     <div style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
       {Array.from({ length: goal }).map((_, i) => {
-        const isFilled = i < filled;
+        const isFilled = i < visibleFilled;
         return (
           <button
             key={i}
