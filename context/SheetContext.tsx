@@ -6,7 +6,7 @@ export interface FoodSearchResult {
   id: number;
   source_food_id: string;
   barcode_product_id?: number;
-  source_method?: "manual" | "barcode";
+  source_method?: "manual" | "barcode" | "photo";
   canonical_name: string;
   kcal_100g: number | null;
   protein_g_100g: number | null;

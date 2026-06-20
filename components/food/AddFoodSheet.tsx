@@ -106,6 +106,7 @@ export function AddFoodSheet() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [analyzingPhoto, setAnalyzingPhoto] = useState(false);
   const [scannerMode, setScannerMode] = useState<ScannerMode>("idle");
   const [scannerStatus, setScannerStatus] = useState<ScannerStatus>("idle");
   const [scannerMessage, setScannerMessage] = useState<string | null>(null);
@@ -206,6 +207,7 @@ export function AddFoodSheet() {
       setQuery("");
       setError(null);
       setAdding(false);
+      setAnalyzingPhoto(false);
       setScannerMode("idle");
       setScannerStatus("idle");
       setScannerMessage(null);
@@ -357,10 +359,12 @@ export function AddFoodSheet() {
 
   const [pendingFood, setPendingFood] = useState<FoodSearchResult | null>(null);
   const [portionGrams, setPortionGrams] = useState<string>("");
+  const [aiConfidence, setAiConfidence] = useState<number | null>(null);
 
   function openPortionPicker(food: FoodSearchResult) {
     setPendingFood(food);
     setPortionGrams(String(food.default_portion_g ?? 100));
+    setAiConfidence(null);
   }
 
   async function confirmPortion() {
@@ -372,6 +376,35 @@ export function AddFoodSheet() {
     setAdding(false);
     setPendingFood(null);
     closeSheet();
+  }
+
+  async function analyzePhoto(file: File) {
+    if (analyzingPhoto || adding) return;
+    setAnalyzingPhoto(true);
+    setScannerStatus("lookup");
+    setScannerMessage("Analizando la foto con IA…");
+
+    try {
+      const form = new FormData();
+      form.append("photo", file);
+      const res = await fetch("/api/foods/photo", { method: "POST", body: form });
+      const payload = await res.json();
+
+      if (!res.ok) {
+        throw new Error(payload?.error ?? "No pudimos analizar la foto.");
+      }
+
+      const food = payload.food as FoodSearchResult;
+      setScannerStatus("success");
+      setScannerMessage(`Detectamos: ${food.canonical_name}. Revisá la porción.`);
+      openPortionPicker(food);
+      setAiConfidence(typeof payload.confidence === "number" ? payload.confidence : null);
+    } catch (err) {
+      setScannerStatus("error");
+      setScannerMessage(err instanceof Error ? err.message : "No pudimos analizar la foto.");
+    } finally {
+      setAnalyzingPhoto(false);
+    }
   }
 
   return (
@@ -412,6 +445,24 @@ export function AddFoodSheet() {
             <div style={{ marginTop: 16, fontSize: 13.5, fontWeight: 500, color: "var(--text-1)" }}>
               {pendingFood.canonical_name}
             </div>
+            {pendingFood.source_method === "photo" && (
+              <div style={{
+                marginTop: 6,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                alignSelf: "flex-start",
+                padding: "3px 9px",
+                borderRadius: 999,
+                background: "color-mix(in srgb, var(--orange) 14%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--orange) 35%, transparent)",
+              }}>
+                <IconCamera size={11} color="var(--orange)" />
+                <span style={{ fontSize: 10.5, fontFamily: "var(--font-mono)", color: "var(--orange)", fontWeight: 600 }}>
+                  Estimación IA{aiConfidence != null ? ` · ${Math.round(aiConfidence * 100)}%` : ""}
+                </span>
+              </div>
+            )}
             {pendingFood.default_portion_name && (
               <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2, fontFamily: "var(--font-mono)" }}>
                 Porción de ref: {pendingFood.default_portion_name} ({pendingFood.default_portion_g ?? 100}g)
@@ -613,10 +664,9 @@ export function AddFoodSheet() {
               }
               stopScanner();
               setScannerMode("idle");
-              setScannerStatus("error");
-              setScannerMessage("La identificación por foto llega pronto. Mientras tanto buscala manualmente o escaneá el código.");
+              photoInputRef.current?.click();
             }}
-            disabled={adding || scannerStatus === "requesting" || scannerStatus === "lookup"}
+            disabled={adding || analyzingPhoto || scannerStatus === "requesting" || scannerStatus === "lookup"}
             style={{
               flex: 1,
               display: "flex",
@@ -648,10 +698,9 @@ export function AddFoodSheet() {
         hidden
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (!file) return;
-          setScannerStatus("success");
-          setScannerMessage("Foto recibida. El calculo automatico con IA va en el siguiente paso.");
           e.currentTarget.value = "";
+          if (!file) return;
+          void analyzePhoto(file);
         }}
       />
 
