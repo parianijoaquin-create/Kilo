@@ -6,6 +6,9 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Screen } from "@/components/layout/Screen";
 import { SectionHead } from "@/components/ui/SectionHead";
 import { useReminders, type ReminderKind, type Reminder } from "@/hooks/useReminders";
+import { useUndoableDelete } from "@/hooks/useUndoableDelete";
+import { SwipeToDelete } from "@/components/ui/SwipeToDelete";
+import { EmptyState } from "@/components/ui/EmptyState";
 import {
   pushSupported,
   ensurePermission,
@@ -30,6 +33,7 @@ const DAYS = [
 export default function RemindersPage() {
   const router = useRouter();
   const { reminders, loading, createReminder, updateReminder, deleteReminder } = useReminders();
+  const { remove: removeReminder, isPending: isReminderPending } = useUndoableDelete(deleteReminder, { label: "Recordatorio eliminado" });
 
   const [pushState, setPushState] = useState<"unsupported" | "denied" | "off" | "on" | "loading" | "error">("loading");
   const [pushMsg, setPushMsg] = useState<string | null>(null);
@@ -174,18 +178,18 @@ export default function RemindersPage() {
           {loading ? (
             <div style={{ padding: "24px 0", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>Cargando…</div>
           ) : reminders.length === 0 ? (
-            <div style={{ padding: "24px 0", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>
-              No tenés recordatorios todavía.
-            </div>
-          ) : reminders.map((r) => (
-            <ReminderRow
-              key={r.id}
-              reminder={r}
-              onToggle={(enabled) => updateReminder(r.id, { enabled })}
-              onDelete={() => {
-                if (window.confirm(`¿Borrar "${r.label}"?`)) deleteReminder(r.id);
-              }}
+            <EmptyState
+              emoji="🔔"
+              title="Sin recordatorios todavía"
+              subtitle="Creá uno para que te avisemos de comer, tomar agua, pesarte o cumplir un hábito."
             />
+          ) : reminders.filter((r) => !isReminderPending(r.id)).map((r) => (
+            <SwipeToDelete key={r.id} radius={14} label="Borrar" onDelete={() => removeReminder(r.id)}>
+              <ReminderRow
+                reminder={r}
+                onToggle={(enabled) => updateReminder(r.id, { enabled })}
+              />
+            </SwipeToDelete>
           ))}
 
           <NewReminderForm onCreate={createReminder} />
@@ -200,10 +204,9 @@ export default function RemindersPage() {
   );
 }
 
-function ReminderRow({ reminder, onToggle, onDelete }: {
+function ReminderRow({ reminder, onToggle }: {
   reminder: Reminder;
   onToggle: (enabled: boolean) => void;
-  onDelete: () => void;
 }) {
   const k = KIND_LABELS[reminder.kind];
   const days = reminder.days_of_week;
@@ -249,15 +252,6 @@ function ReminderRow({ reminder, onToggle, onDelete }: {
           transition: "left 0.15s",
         }} />
       </label>
-
-      <button
-        onClick={onDelete}
-        aria-label="Borrar"
-        style={{
-          width: 24, height: 24, background: "transparent",
-          border: "none", color: "var(--text-3)", fontSize: 16, cursor: "pointer", opacity: 0.6,
-        }}
-      >×</button>
     </div>
   );
 }

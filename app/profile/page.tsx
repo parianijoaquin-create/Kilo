@@ -267,7 +267,7 @@ export default function ProfilePage() {
         <div style={{ padding: "0 20px" }}>
           <div style={{ background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 18, overflow: "hidden" }}>
             {settingsRows.map((r, i) => {
-              const href = i === 0 ? "/onboarding" : i === 1 ? "/profile/reminders" : null;
+              const href = i === 0 ? "/profile/goals" : i === 1 ? "/profile/reminders" : null;
               return (
                 <button
                   key={r.label}

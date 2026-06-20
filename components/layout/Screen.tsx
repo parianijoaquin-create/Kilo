@@ -24,8 +24,8 @@ export function Screen({ children, padBottom = 110, padTop = 0, scrollKey }: Scr
         flex: 1,
         overflowY: "auto",
         overflowX: "hidden",
-        paddingTop: padTop,
-        paddingBottom: padBottom,
+        paddingTop: `calc(${padTop}px + env(safe-area-inset-top, 0px))`,
+        paddingBottom: `calc(${padBottom}px + env(safe-area-inset-bottom, 0px))`,
         WebkitOverflowScrolling: "touch",
       }}
     >

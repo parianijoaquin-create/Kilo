@@ -11,6 +11,9 @@ import { useDiary, type DiaryMeal, type DiaryItem } from "@/hooks/useDiary";
 import { useProfile } from "@/hooks/useProfile";
 import { useToday } from "@/hooks/useToday";
 import { useWater } from "@/hooks/useWater";
+import { useUndoableDelete } from "@/hooks/useUndoableDelete";
+import { SwipeToDelete } from "@/components/ui/SwipeToDelete";
+import { haptic } from "@/lib/haptics";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
 
 const STANDARD_MEALS = ["morning", "lunch", "snack", "dinner"] as const;
@@ -49,9 +52,10 @@ function fmtNum(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
 }
 
-function FoodLogRow({ item, isFirst, isLast, onDelete }: { item: DiaryItem; isFirst: boolean; isLast: boolean; onDelete: () => void }) {
+function FoodLogRow({ item, isFirst, isLast }: { item: DiaryItem; isFirst: boolean; isLast: boolean }) {
   return (
     <div
+      className="kilo-item-enter"
       style={{
         background: "var(--bg-1)",
         border: "1px solid var(--line-1)",
@@ -67,26 +71,6 @@ function FoodLogRow({ item, isFirst, isLast, onDelete }: { item: DiaryItem; isFi
         position: "relative",
       }}
     >
-      <button
-        onClick={() => {
-          if (window.confirm(`¿Borrar "${item.item_name_snapshot}" del diario?`)) onDelete();
-        }}
-        aria-label="Borrar item"
-        style={{
-          position: "absolute",
-          top: 6, right: 8,
-          width: 22, height: 22,
-          background: "transparent",
-          border: "none",
-          color: "var(--text-3)",
-          fontSize: 14,
-          cursor: "pointer",
-          lineHeight: 1,
-          opacity: 0.5,
-        }}
-      >
-        ×
-      </button>
       <span style={{ fontSize: 22, lineHeight: 1 }}>🍽️</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
@@ -131,13 +115,15 @@ function MealSection({
   meal,
   onAdd,
   onDeleteItem,
+  isPending,
 }: {
   mealType: string;
   meal: DiaryMeal | null;
   onAdd: () => void;
   onDeleteItem: (itemId: string) => void;
+  isPending: (id: string) => boolean;
 }) {
-  const items = meal?.meal_items ?? [];
+  const items = (meal?.meal_items ?? []).filter((i) => !isPending(i.id));
   const mealKcal = Math.round(items.reduce((s, i) => s + (i.calories_kcal ?? 0), 0));
 
   return (
@@ -196,15 +182,21 @@ function MealSection({
         </button>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          {items.map((item, idx) => (
-            <FoodLogRow
-              key={item.id}
-              item={item}
-              isFirst={idx === 0}
-              isLast={idx === items.length - 1}
-              onDelete={() => onDeleteItem(item.id)}
-            />
-          ))}
+          {items.map((item, idx) => {
+            const isFirst = idx === 0;
+            const isLast = idx === items.length - 1;
+            const r = (a: boolean, b: boolean) => `${a ? 14 : 4}px ${a ? 14 : 4}px ${b ? 14 : 4}px ${b ? 14 : 4}px`;
+            return (
+              <SwipeToDelete
+                key={item.id}
+                radius={r(isFirst, isLast)}
+                label="Borrar"
+                onDelete={() => onDeleteItem(item.id)}
+              >
+                <FoodLogRow item={item} isFirst={isFirst} isLast={isLast} />
+              </SwipeToDelete>
+            );
+          })}
           <button
             onClick={onAdd}
             style={{
@@ -236,6 +228,7 @@ export default function DiaryPage() {
   const [selectedDate, setSelectedDate] = useState(today);
   const isToday = selectedDate === today;
   const { meals, totals, addMealItem, deleteMealItem } = useDiary(selectedDate);
+  const { remove: removeMealItem, isPending: isItemPending } = useUndoableDelete(deleteMealItem, { label: "Item eliminado" });
   const { glasses: water, setWater } = useWater(selectedDate);
   const { profile } = useProfile();
   const DATE_STRIP = useMemo(() => buildDateStrip(), [today]);
@@ -250,7 +243,7 @@ export default function DiaryPage() {
   const addFoodToMeal = useCallback(async (food: FoodSearchResult, mealType: string, gramsOverride?: number) => {
     const grams = gramsOverride ?? food.default_portion_g ?? 100;
     const f = grams / 100;
-    return addMealItem(mealType, {
+    const res = await addMealItem(mealType, {
       food_id: food.id,
       barcode_product_id: food.barcode_product_id,
       item_name_snapshot: food.canonical_name,
@@ -263,6 +256,8 @@ export default function DiaryPage() {
       source_method: food.source_method ?? (food.barcode_product_id ? "barcode" : "manual"),
       raw_estimation: food.barcode_product_id ? { source: "open_food_facts" } : {},
     });
+    if (!res.error) haptic("success");
+    return res;
   }, [addMealItem]);
 
   const kcalTotal    = Math.round(totals.kcal);
@@ -453,7 +448,8 @@ export default function DiaryPage() {
                 mealType={mealType}
                 meal={meal}
                 onAdd={() => openSheet(mealType, addFoodToMeal)}
-                onDeleteItem={(itemId) => deleteMealItem(itemId)}
+                onDeleteItem={(itemId) => removeMealItem(itemId)}
+                isPending={isItemPending}
               />
             );
           })}

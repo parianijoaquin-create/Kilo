@@ -198,7 +198,7 @@ export async function GET(request: NextRequest) {
     fat_g_100g: Math.round(macro(nutriments, "fat") * 10) / 10,
     fiber_g_100g: Math.round(macro(nutriments, "fiber") * 10) / 10,
     sugar_g_100g: Math.round(macro(nutriments, "sugars") * 10) / 10,
-    sodium_mg_100g: Math.round(macro(nutriments, "sodium") * 100000),
+    sodium_mg_100g: Math.round(macro(nutriments, "sodium") * 1000),
   };
 
   const { data: food, error: foodError } = await supabase

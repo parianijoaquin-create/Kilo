@@ -114,6 +114,7 @@ export function AddFoodSheet() {
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const scanInFlightRef = useRef(false);
+  const lookupRef = useRef<(barcode: string) => void>(() => {});
   const supabase = useMemo(() => createClient(), []);
 
   const fetchSeqRef = useRef(0);
@@ -266,18 +267,33 @@ export function AddFoodSheet() {
     }
   }, [addItemFn, adding, closeSheet, mealId, stopScanner]);
 
-  const startBarcodeScanner = useCallback(async () => {
-    setScannerMode("camera");
-    setScannerStatus("requesting");
-    setScannerMessage("Permiti el acceso a la camara.");
+  // Keep a stable ref to the latest lookup so the camera effect doesn't
+  // restart every time `adding` toggles mid-scan.
+  useEffect(() => {
+    lookupRef.current = lookupBarcode;
+  }, [lookupBarcode]);
 
+  // Just flips to camera mode; the actual stream start happens in the effect
+  // below, once the <video> element is mounted in the DOM.
+  const startBarcodeScanner = useCallback(() => {
     if (!navigator.mediaDevices?.getUserMedia) {
       setScannerMode("manual");
       setScannerStatus("error");
       setScannerMessage("Tu navegador no soporta camara. Ingresalo manualmente.");
       return;
     }
+    setScannerMode("camera");
+    setScannerStatus("requesting");
+    setScannerMessage("Permiti el acceso a la camara.");
+  }, []);
 
+  // Start the camera stream once the <video> is actually rendered.
+  useEffect(() => {
+    if (!isOpen || scannerMode !== "camera") return;
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+
+    let cancelled = false;
     const hints = new Map<DecodeHintType, unknown>();
     hints.set(DecodeHintType.POSSIBLE_FORMATS, [
       BarcodeFormat.EAN_13,
@@ -291,40 +307,53 @@ export function AddFoodSheet() {
 
     const reader = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 200 });
 
-    try {
-      const controls = await reader.decodeFromConstraints(
-        {
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+    (async () => {
+      try {
+        const controls = await reader.decodeFromConstraints(
+          {
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+            audio: false,
           },
-          audio: false,
-        },
-        videoRef.current!,
-        (result) => {
-          if (!result || scanInFlightRef.current) return;
-          const raw = result.getText().replace(/\D/g, "");
-          if (!raw) return;
-          scanInFlightRef.current = true;
-          void lookupBarcode(raw);
+          videoEl,
+          (result) => {
+            if (!result || scanInFlightRef.current) return;
+            const raw = result.getText().replace(/\D/g, "");
+            if (!raw) return;
+            scanInFlightRef.current = true;
+            lookupRef.current(raw);
+          }
+        );
+        if (cancelled) {
+          controls.stop();
+          return;
         }
-      );
-      controlsRef.current = controls;
-      setScannerStatus("scanning");
-      setScannerMessage("Apunta al codigo y mantenelo dentro del recuadro.");
-    } catch (err) {
-      stopScanner();
-      setScannerMode("manual");
-      setScannerStatus("error");
-      const isPermission = err instanceof DOMException && err.name === "NotAllowedError";
-      setScannerMessage(
-        isPermission
-          ? "La camara esta bloqueada. Habilitala desde el navegador o ingresalo manualmente."
-          : "No pudimos abrir la camara. Ingresalo manualmente."
-      );
-    }
-  }, [lookupBarcode, stopScanner]);
+        controlsRef.current = controls;
+        // iOS Safari sometimes needs an explicit play() to render inline.
+        void videoEl.play().catch(() => {});
+        setScannerStatus("scanning");
+        setScannerMessage("Apunta al codigo y mantenelo dentro del recuadro.");
+      } catch (err) {
+        if (cancelled) return;
+        stopScanner();
+        setScannerMode("manual");
+        setScannerStatus("error");
+        const isPermission = err instanceof DOMException && err.name === "NotAllowedError";
+        setScannerMessage(
+          isPermission
+            ? "La camara esta bloqueada. Habilitala desde el navegador o ingresalo manualmente."
+            : "No pudimos abrir la camara. Ingresalo manualmente."
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, scannerMode, stopScanner]);
 
   const [pendingFood, setPendingFood] = useState<FoodSearchResult | null>(null);
   const [portionGrams, setPortionGrams] = useState<string>("");
@@ -639,6 +668,7 @@ export function AddFoodSheet() {
                 <video
                   ref={videoRef}
                   muted
+                  autoPlay
                   playsInline
                   style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                 />

@@ -106,6 +106,43 @@ input {
   opacity: 0.85;
 }
 
+/* ─── Completion pop + burst (marcar hábito / logro) ────────── */
+@keyframes kiloPop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.22); }
+  70%  { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+.kilo-pop {
+  animation: kiloPop 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes kiloBurst {
+  0%   { transform: scale(0.6); opacity: 0.55; }
+  100% { transform: scale(2.1); opacity: 0; }
+}
+.kilo-burst {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  pointer-events: none;
+  animation: kiloBurst 520ms ease-out forwards;
+}
+
+@keyframes kiloCheckIn {
+  from { transform: scale(0); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+.kilo-check-in {
+  animation: kiloCheckIn 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ─── List item entrance (nuevo registro) ───────────────────── */
+.kilo-item-enter {
+  animation: kiloFadeUp var(--motion-state) both;
+}
+
 /* ─── Skeleton loader pulse ─────────────────────────────────── */
 @keyframes kiloSkeleton {
   0%, 100% { opacity: 0.4; }
@@ -129,5 +166,11 @@ input {
   .kilo-skeleton {
     animation: none;
     opacity: 0.5;
+  }
+  .kilo-pop,
+  .kilo-burst,
+  .kilo-check-in,
+  .kilo-item-enter {
+    animation: none;
   }
 }

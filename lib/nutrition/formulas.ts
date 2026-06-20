@@ -55,6 +55,94 @@ export function defaultMacroTargets(kcal: number, goal: GoalType): {
   return { protein_g, carbs_g, fat_g };
 }
 
+/**
+ * Recommended *signed* weekly weight change (kg/week) for a goal.
+ * Negative = lose, positive = gain. Scaled to bodyweight and clamped to
+ * evidence-based safe ranges (~0.5–1% of bodyweight per week).
+ */
+export function recommendedWeeklyChangeKg(goal: GoalType, weightKg: number): number {
+  switch (goal) {
+    case "lose":
+      return -clamp(weightKg * 0.0065, 0.35, 0.9);
+    case "gain":
+      return clamp(weightKg * 0.0035, 0.2, 0.45);
+    case "recomp":
+      return -clamp(weightKg * 0.002, 0.1, 0.25);
+    case "maintain":
+    default:
+      return 0;
+  }
+}
+
+export interface GoalProjection {
+  /** kg still to change (signed: current → goal). */
+  deltaKg: number;
+  /** Recommended signed kg/week for the goal. */
+  weeklyKg: number;
+  /** Whole weeks to reach the goal at the recommended pace. */
+  weeks: number | null;
+  /** Estimated arrival date, or null if not computable. */
+  targetDate: Date | null;
+  /** True when the goal weight contradicts the chosen goal type. */
+  directionMismatch: boolean;
+  /** True when already at (or past) the goal weight. */
+  reached: boolean;
+}
+
+/** Projects how long it takes to reach `goalKg` from `currentKg` at the recommended pace. */
+export function projectGoal(currentKg: number, goalKg: number, goal: GoalType): GoalProjection {
+  const deltaKg = Math.round((goalKg - currentKg) * 10) / 10;
+  const weeklyKg = recommendedWeeklyChangeKg(goal, currentKg);
+
+  if (Math.abs(deltaKg) < 0.1) {
+    return { deltaKg, weeklyKg, weeks: 0, targetDate: new Date(), directionMismatch: false, reached: true };
+  }
+
+  // weeklyKg of 0 (maintain) or goal weight pulling the "wrong" way.
+  const directionMismatch = weeklyKg === 0 || Math.sign(deltaKg) !== Math.sign(weeklyKg);
+  if (directionMismatch) {
+    return { deltaKg, weeklyKg, weeks: null, targetDate: null, directionMismatch: true, reached: false };
+  }
+
+  const weeks = Math.ceil(Math.abs(deltaKg) / Math.abs(weeklyKg));
+  const targetDate = new Date();
+  targetDate.setDate(targetDate.getDate() + weeks * 7);
+  return { deltaKg, weeklyKg, weeks, targetDate, directionMismatch: false, reached: false };
+}
+
+/** Macro grams from percentage split of a kcal target (P/C use 4 kcal/g, F uses 9). */
+export function macrosFromPercents(
+  kcal: number,
+  proteinPct: number,
+  carbsPct: number,
+  fatPct: number
+): { protein_g: number; carbs_g: number; fat_g: number } {
+  return {
+    protein_g: Math.round((kcal * (proteinPct / 100)) / 4),
+    carbs_g: Math.round((kcal * (carbsPct / 100)) / 4),
+    fat_g: Math.round((kcal * (fatPct / 100)) / 9),
+  };
+}
+
+/** Reverse of macrosFromPercents: derive %s from gram targets (rounded, normalized to 100). */
+export function percentsFromMacros(
+  proteinG: number,
+  carbsG: number,
+  fatG: number
+): { proteinPct: number; carbsPct: number; fatPct: number } {
+  const kcal = proteinG * 4 + carbsG * 4 + fatG * 9;
+  if (kcal <= 0) return { proteinPct: 30, carbsPct: 40, fatPct: 30 };
+  let p = Math.round((proteinG * 4 * 100) / kcal);
+  let f = Math.round((fatG * 9 * 100) / kcal);
+  let c = 100 - p - f;
+  if (c < 0) { c = 0; f = 100 - p; }
+  return { proteinPct: p, carbsPct: c, fatPct: f };
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
 export function ageFromBirthDate(birthDate: string): number {
   const today = new Date();
   const birth = new Date(birthDate);

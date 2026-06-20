@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { Bar } from "@/components/ui/Bar";
-import { IconFlame, IconCheck } from "@/components/icons";
+import { IconFlame } from "@/components/icons";
+import { CheckToggle } from "@/components/ui/CheckToggle";
 
 interface HabitRowProps {
   Icon: ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
@@ -76,23 +77,20 @@ export function HabitRow({ Icon, name, sub, streak, done, color, progress, onCli
         {streak}
       </div>
 
-      <div
-        onClick={onToggle ? (e) => { e.stopPropagation(); onToggle(); } : undefined}
-        style={{
-          width: 26,
-          height: 26,
-          borderRadius: "50%",
-          background: done ? "var(--lime)" : "transparent",
-          border: done ? "1.5px solid var(--lime)" : "1.5px solid var(--line-2)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-          cursor: onToggle ? "pointer" : "default",
-        }}
-      >
-        {done && <IconCheck size={14} color="#0a0d15" strokeWidth={2.5} />}
-      </div>
+      {onToggle ? (
+        <CheckToggle done={done} onToggle={onToggle} size={26} color="var(--lime)" aria-label={`Marcar "${name}" como hecho`} />
+      ) : (
+        <div
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: "50%",
+            background: done ? "var(--lime)" : "transparent",
+            border: "1.5px solid " + (done ? "var(--lime)" : "var(--line-2)"),
+            flexShrink: 0,
+          }}
+        />
+      )}
     </div>
   );
 }

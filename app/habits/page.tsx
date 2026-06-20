@@ -10,6 +10,9 @@ import {
   IconLeaf, IconActivity, IconRunner,
 } from "@/components/icons";
 import { useHabits } from "@/hooks/useHabits";
+import { useUndoableDelete } from "@/hooks/useUndoableDelete";
+import { SwipeToDelete } from "@/components/ui/SwipeToDelete";
+import { CheckToggle } from "@/components/ui/CheckToggle";
 import type { Habit, HabitColor } from "@/types";
 
 const DAYS = ["L", "M", "M", "J", "V", "S", "D"];
@@ -109,7 +112,7 @@ function milestoneFor(streak: number): { label: string; emoji: string } | null {
   return null;
 }
 
-function HabitCard({ habit, onToggle, onDelete, onEdit }: { habit: HabitView; onToggle: () => void; onDelete: () => void; onEdit: () => void }) {
+function HabitCard({ habit, onToggle, onEdit }: { habit: HabitView; onToggle: () => void; onEdit: () => void }) {
   const { palette, Icon } = habit;
   const milestone = milestoneFor(habit.streak);
   const gradBg = habit.doneToday
@@ -139,24 +142,6 @@ function HabitCard({ habit, onToggle, onDelete, onEdit }: { habit: HabitView; on
           }}
         >
           ✎
-        </button>
-        <button
-          onClick={() => {
-            if (window.confirm(`¿Borrar el hábito "${habit.name}"?`)) onDelete();
-          }}
-          aria-label="Borrar hábito"
-          style={{
-            width: 24, height: 24,
-            background: "transparent",
-            border: "none",
-            color: "var(--text-3)",
-            fontSize: 14,
-            cursor: "pointer",
-            lineHeight: 1,
-            opacity: 0.5,
-          }}
-        >
-          ×
         </button>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -198,19 +183,13 @@ function HabitCard({ habit, onToggle, onDelete, onEdit }: { habit: HabitView; on
             DÍAS
           </div>
         </div>
-        <button
-          onClick={onToggle}
-          className="kilo-pressable"
-          style={{
-            width: 36, height: 36, borderRadius: "50%",
-            background: habit.doneToday ? palette.c : "transparent",
-            border: habit.doneToday ? "none" : "1.5px solid var(--line-2)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer",
-          }}
-        >
-          {habit.doneToday && <IconCheck size={18} color="#0a0d15" strokeWidth={2.5} />}
-        </button>
+        <CheckToggle
+          done={habit.doneToday}
+          onToggle={onToggle}
+          size={36}
+          color={palette.c}
+          aria-label={`Marcar "${habit.name}" como hecho`}
+        />
       </div>
 
       {/* week dots */}
@@ -356,10 +335,13 @@ function HabitForm({ mode, initial, onSubmit, onCancel }: {
 
 export default function HabitsPage() {
   const { habits, toggleHabit, createHabit, deleteHabit, updateHabit, loading } = useHabits();
+  const { remove: removeHabit, isPending } = useUndoableDelete(deleteHabit, { label: "Hábito eliminado" });
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const week = buildWeekDates();
-  const views = habits.map((h, i) => buildHabitView(h, i, week));
+  const views = habits
+    .map((h, i) => buildHabitView(h, i, week))
+    .filter((v) => !isPending(v.id));
 
   const totalToday = views.length;
   const doneTodayCount = views.filter((v) => v.doneToday).length;
@@ -483,13 +465,13 @@ export default function HabitsPage() {
                 onCancel={() => setEditingId(null)}
               />
             ) : (
-              <HabitCard
-                key={h.id}
-                habit={h}
-                onToggle={() => toggleHabit(h.id)}
-                onDelete={() => deleteHabit(h.id)}
-                onEdit={() => setEditingId(h.id)}
-              />
+              <SwipeToDelete key={h.id} onDelete={() => removeHabit(h.id)}>
+                <HabitCard
+                  habit={h}
+                  onToggle={() => toggleHabit(h.id)}
+                  onEdit={() => setEditingId(h.id)}
+                />
+              </SwipeToDelete>
             )
           )}
 
