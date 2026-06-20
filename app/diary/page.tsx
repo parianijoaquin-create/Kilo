@@ -13,6 +13,7 @@ import { useToday } from "@/hooks/useToday";
 import { useWater } from "@/hooks/useWater";
 import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 import { SwipeToDelete } from "@/components/ui/SwipeToDelete";
+import { WaterGlasses } from "@/components/ui/WaterGlasses";
 import { haptic } from "@/lib/haptics";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
 
@@ -479,28 +480,7 @@ export default function DiaryPage() {
                 <span style={{ color: "var(--blue)", fontWeight: 600 }}>{water}</span>/{waterGoal} vasos
               </span>
             </div>
-            <div style={{ display: "flex", gap: 5 }}>
-              {Array.from({ length: waterGoal }).map((_, i) => (
-                <div
-                  key={i}
-                  onClick={() => setWater(i + 1 === water ? i : i + 1)}
-                  className="kilo-pressable"
-                  style={{
-                    flex: 1,
-                    height: 32,
-                    borderRadius: 6,
-                    background: i < water ? "rgba(91,141,239,0.25)" : "var(--bg-2)",
-                    border: i < water ? "1px solid rgba(91,141,239,0.5)" : "1px solid var(--line-1)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                  }}
-                >
-                  {i < water && <IconDroplet size={12} color="var(--blue)" />}
-                </div>
-              ))}
-            </div>
+            <WaterGlasses goal={waterGoal} filled={water} onChange={setWater} />
           </div>
         </div>
 
