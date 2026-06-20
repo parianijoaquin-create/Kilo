@@ -11,6 +11,17 @@ interface ReminderRow {
   label: string;
   time_of_day: string;
   days_of_week: number[];
+  last_sent_at: string | null;
+}
+
+// Un recordatorio dispara como máximo una vez por día. Si ya se envió hace
+// menos de esto, lo salteamos: evita duplicados cuando el cron externo corre
+// cada 1, 5 o 10 minutos (la ventana se solapa entre corridas).
+const DEDUP_WINDOW_MS = 6 * 60 * 60 * 1000; // 6 h
+
+function minutesOfDay(timeStr: string): number {
+  const [h, m] = timeStr.split(":");
+  return (Number(h) || 0) * 60 + (Number(m) || 0);
 }
 
 interface SubRow {
@@ -75,23 +86,64 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "VAPID no configurado" }, { status: 503 });
   }
 
+  // Ventana en minutos: tolerá que el cron externo corra cada 1/5/10 min.
+  const windowRaw = Number(request.nextUrl.searchParams.get("window") ?? "5");
+  const windowMin = Math.min(60, Math.max(1, Number.isFinite(windowRaw) ? windowRaw : 5));
+
   const supabase = adminClient();
   const { weekday, hh, mm } = nowInTz();
   const target = `${hh}:${mm}`;
+  const nowMin = Number(hh) * 60 + Number(mm);
+  const nowMs = Date.now();
 
-  // Match reminders firing this exact minute, today, enabled.
-  const { data: reminders, error: rErr } = await supabase
+  // Traemos los habilitados de hoy y filtramos la ventana en memoria
+  // (son pocos; evita líos de comparación de strings y cruce de medianoche).
+  let reminders: Partial<ReminderRow>[] | null = null;
+  let dedupEnabled = true;
+
+  const withDedup = await supabase
     .from("reminders")
-    .select("id, user_id, kind, label, time_of_day, days_of_week")
-    .eq("enabled", true)
-    .gte("time_of_day", `${target}:00`)
-    .lte("time_of_day", `${target}:59`);
+    .select("id, user_id, kind, label, time_of_day, days_of_week, last_sent_at")
+    .eq("enabled", true);
 
-  if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 });
+  if (withDedup.error) {
+    // Si la columna last_sent_at aún no existe (migración pendiente), seguimos
+    // sin dedup en vez de romper. Corré sql/migrations_add_last_sent_at.sql.
+    dedupEnabled = false;
+    const fallback = await supabase
+      .from("reminders")
+      .select("id, user_id, kind, label, time_of_day, days_of_week")
+      .eq("enabled", true);
+    if (fallback.error) {
+      return NextResponse.json({ error: fallback.error.message }, { status: 500 });
+    }
+    reminders = fallback.data as Partial<ReminderRow>[];
+  } else {
+    reminders = withDedup.data as Partial<ReminderRow>[];
+  }
 
-  const matched = (reminders ?? []).filter((r) => (r as ReminderRow).days_of_week.includes(weekday));
+  const matched = (reminders ?? []).filter((row) => {
+    const r = row as ReminderRow;
+    if (!r.days_of_week.includes(weekday)) return false;
+
+    // ¿La hora programada cae dentro de los últimos `windowMin` minutos?
+    const remMin = minutesOfDay(r.time_of_day);
+    let due = remMin <= nowMin && remMin > nowMin - windowMin;
+    if (nowMin - windowMin < 0) {
+      // Ventana que cruza medianoche (ej: 00:03 con ventana 10).
+      due = due || remMin > 1440 + (nowMin - windowMin);
+    }
+    if (!due) return false;
+
+    // Dedup: ya enviado hace poco → no reenviar.
+    if (dedupEnabled && r.last_sent_at && nowMs - new Date(r.last_sent_at).getTime() < DEDUP_WINDOW_MS) {
+      return false;
+    }
+    return true;
+  }) as ReminderRow[];
+
   if (matched.length === 0) {
-    return NextResponse.json({ ok: true, target, weekday, matched: 0, sent: 0 });
+    return NextResponse.json({ ok: true, target, weekday, window: windowMin, matched: 0, sent: 0 });
   }
 
   const userIds = [...new Set(matched.map((r) => (r as ReminderRow).user_id))];
@@ -140,8 +192,18 @@ export async function GET(request: NextRequest) {
     await supabase.from("push_subscriptions").delete().in("endpoint", stale);
   }
 
+  // Marcamos como enviados para que la próxima corrida (ventana solapada) no
+  // los reprocese. Se libera solo al pasar DEDUP_WINDOW_MS (siguiente día).
+  if (dedupEnabled) {
+    await supabase
+      .from("reminders")
+      .update({ last_sent_at: new Date(nowMs).toISOString() })
+      .in("id", matched.map((r) => r.id));
+  }
+
   return NextResponse.json({
     ok: true,
+    window: windowMin,
     target, weekday,
     matched: matched.length,
     sent,

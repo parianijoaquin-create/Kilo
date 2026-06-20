@@ -234,9 +234,13 @@ create table if not exists public.reminders (
   time_of_day time not null,
   days_of_week int[] not null default '{1,2,3,4,5,6,7}',
   enabled boolean not null default true,
+  last_sent_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Idempotente para bases ya creadas sin la columna.
+alter table public.reminders add column if not exists last_sent_at timestamptz;
 
 create index if not exists reminders_user_idx on public.reminders(user_id, enabled);
 

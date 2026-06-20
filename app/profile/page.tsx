@@ -13,6 +13,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useWeightLog } from "@/hooks/useWeightLog";
+import { WeightSpark } from "@/components/dashboard/WeightSpark";
 
 const SETTINGS_BASE = [
   { Icon: IconTarget,   label: "Objetivos y macros" },
@@ -33,7 +34,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const { signOut } = useAuth();
   const { profile } = useProfile();
-  const { latestWeight, logWeight, saving, sparkData } = useWeightLog();
+  const { latestWeight, logWeight, saving, sparkData, history } = useWeightLog();
 
   const displayName = profile?.display_name ?? "…";
   const displayWeight = latestWeight ?? profile?.current_weight_kg;
@@ -50,16 +51,20 @@ export default function ProfilePage() {
     ? Math.round((displayWeight - profile.goal_weight_kg) * 10) / 10
     : null;
 
-  const otherStats = [
+  const otherStats: {
+    l: string; u: string; value: string; delta: string; onPress?: () => void;
+  }[] = [
     {
       l: "Meta", u: "kg",
       value: profile?.goal_weight_kg != null ? String(profile.goal_weight_kg) : "–",
       delta: remainingKg != null ? `${remainingKg > 0 ? "−" : "+"}${Math.abs(remainingKg)} a ir` : "definí meta",
+      onPress: () => router.push("/profile/goals"),
     },
     {
       l: "Registros peso", u: "",
-      value: String(sparkData.length),
-      delta: sparkData.length > 0 ? "registrados" : "registrá tu peso",
+      value: String(history.length),
+      delta: history.length > 0 ? "registrados" : "registrá tu peso",
+      onPress: () => openEdit(),
     },
     {
       l: "Altura", u: "cm",
@@ -245,9 +250,18 @@ export default function ProfilePage() {
             )}
           </div>
 
-          {/* ── Resto de stats (hardcoded) ── */}
+          {/* ── Resto de stats ── */}
           {otherStats.map((s) => (
-            <div key={s.l} style={{ background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 16, padding: 14 }}>
+            <div
+              key={s.l}
+              onClick={s.onPress}
+              className={s.onPress ? "kilo-pressable" : undefined}
+              style={{
+                background: "var(--bg-1)", border: "1px solid var(--line-1)",
+                borderRadius: 16, padding: 14,
+                cursor: s.onPress ? "pointer" : "default",
+              }}
+            >
               <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "var(--font-mono)", fontWeight: 600 }}>
                 {s.l}
               </div>
@@ -261,6 +275,63 @@ export default function ProfilePage() {
           ))}
 
         </div>
+
+        {/* ── Línea de tiempo del peso ── */}
+        {history.length > 0 && (
+          <>
+            <SectionHead title="Evolución del peso" />
+            <div style={{ padding: "0 20px" }}>
+              <div style={{ background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 18, padding: 16 }}>
+                {sparkData.length >= 2 && (
+                  <div style={{ marginBottom: history.length > 0 ? 14 : 0 }}>
+                    <WeightSpark data={sparkData} />
+                  </div>
+                )}
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  {history.map((entry, i) => {
+                    const prev = history[i + 1];
+                    const diff = prev ? Math.round((entry.weight_kg - prev.weight_kg) * 10) / 10 : null;
+                    const date = new Date(entry.logged_at).toLocaleDateString("es-AR", {
+                      day: "numeric", month: "short",
+                    });
+                    return (
+                      <div
+                        key={entry.id}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 10,
+                          padding: "10px 0",
+                          borderBottom: i < history.length - 1 ? "0.5px solid var(--line-1)" : "none",
+                        }}
+                      >
+                        <span style={{ width: 8, height: 8, borderRadius: 4, background: i === 0 ? "var(--lime)" : "var(--line-2)", flexShrink: 0 }} />
+                        <span style={{ flex: 1, fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-mono)", letterSpacing: "0.02em" }}>
+                          {date}{i === 0 ? " · último" : ""}
+                        </span>
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>
+                          {entry.weight_kg}<span style={{ fontSize: 10, color: "var(--text-3)" }}> kg</span>
+                        </span>
+                        {diff != null && diff !== 0 && (
+                          <span style={{
+                            fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600,
+                            minWidth: 44, textAlign: "right",
+                            color: diff < 0 ? "var(--lime)" : "var(--orange)",
+                          }}>
+                            {diff < 0 ? "↓" : "↑"}{Math.abs(diff)}
+                          </span>
+                        )}
+                        {(diff == null || diff === 0) && (
+                          <span style={{ minWidth: 44, textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-3)" }}>
+                            {diff === 0 ? "=" : "·"}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Settings list */}
         <SectionHead title="Configuración" />
