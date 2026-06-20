@@ -13,6 +13,7 @@ import { useHabits } from "@/hooks/useHabits";
 import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 import { SwipeToDelete } from "@/components/ui/SwipeToDelete";
 import { CheckToggle } from "@/components/ui/CheckToggle";
+import { EmptyState } from "@/components/ui/EmptyState";
 import type { Habit, HabitColor } from "@/types";
 
 const DAYS = ["L", "M", "M", "J", "V", "S", "D"];
@@ -488,6 +489,13 @@ export default function HabitsPage() {
                 return res;
               }}
               onCancel={() => setCreating(false)}
+            />
+          ) : !loading && views.length === 0 ? (
+            <EmptyState
+              emoji="🌱"
+              title="Empezá tu primer hábito"
+              subtitle="Elegí algo chico y constante: tomar agua, leer 10 minutos, estirar. Los hábitos suman racha día a día."
+              action={{ label: "Crear hábito", onClick: () => setCreating(true) }}
             />
           ) : (
             <button
