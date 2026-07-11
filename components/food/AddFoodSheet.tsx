@@ -8,9 +8,15 @@ import { IconSearch, IconCamera, IconBarcode, IconClose } from "@/components/ico
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 import type { IScannerControls } from "@zxing/browser";
+import { searchFoods, type RankableFood } from "@/lib/foodSearch";
 
 const TABS = ["Frecuentes", "Recientes", "Mis recetas"] as const;
 type Tab = (typeof TABS)[number];
+
+// Catálogo cargado una vez por sesión y buscado en memoria (acentos + ranking).
+const CATALOG_COLS =
+  "id, source_food_id, canonical_name, kcal_100g, protein_g_100g, carbs_g_100g, fat_g_100g, fiber_g_100g, default_portion_g, default_portion_name, is_verified, is_generic";
+let CATALOG_CACHE: RankableFood[] | null = null;
 
 type ScannerMode = "idle" | "camera" | "manual";
 type ScannerStatus = "idle" | "requesting" | "scanning" | "lookup" | "success" | "error";
@@ -119,22 +125,41 @@ export function AddFoodSheet() {
   const supabase = useMemo(() => createClient(), []);
 
   const fetchSeqRef = useRef(0);
+  const catalogLoadingRef = useRef<Promise<void> | null>(null);
+
+  // Carga el catálogo completo una vez (paginado, por si supera el cap de 1000).
+  const ensureCatalog = useCallback(async () => {
+    if (CATALOG_CACHE) return;
+    if (!catalogLoadingRef.current) {
+      catalogLoadingRef.current = (async () => {
+        const all: RankableFood[] = [];
+        const PAGE = 1000;
+        for (let from = 0; ; from += PAGE) {
+          const { data } = await supabase
+            .from("foods")
+            .select(CATALOG_COLS)
+            .order("id")
+            .range(from, from + PAGE - 1);
+          const rows = (data as RankableFood[] | null) ?? [];
+          all.push(...rows);
+          if (rows.length < PAGE) break;
+        }
+        CATALOG_CACHE = all;
+      })();
+    }
+    await catalogLoadingRef.current;
+  }, [supabase]);
 
   const fetchFoods = useCallback(async (q: string, tab: Tab) => {
     const seq = ++fetchSeqRef.current;
     setLoading(true);
     setError(null);
 
-    // If user is searching, always query the global foods catalog regardless of tab.
+    // Buscando: búsqueda en memoria sobre el catálogo (insensible a acentos + ranking).
     if (q.length >= 2) {
-      const { data, error: err } = await supabase
-        .from("foods")
-        .select("id, source_food_id, canonical_name, kcal_100g, protein_g_100g, carbs_g_100g, fat_g_100g, fiber_g_100g, default_portion_g, default_portion_name")
-        .ilike("canonical_name", `%${q}%`)
-        .limit(30);
+      await ensureCatalog();
       if (seq !== fetchSeqRef.current) return;
-      setFoods((data as FoodSearchResult[]) ?? []);
-      setError(err?.message ?? null);
+      setFoods(searchFoods(CATALOG_CACHE ?? [], q));
       setLoading(false);
       return;
     }
@@ -193,13 +218,18 @@ export function AddFoodSheet() {
     if (seq !== fetchSeqRef.current) return;
     setFoods([]);
     setLoading(false);
-  }, []);
+  }, [ensureCatalog]);
 
   useEffect(() => {
     if (!isOpen) return;
     const t = setTimeout(() => fetchFoods(query, activeTab), query.length >= 2 ? 200 : 0);
     return () => clearTimeout(t);
   }, [query, isOpen, activeTab, fetchFoods]);
+
+  // Precargar el catálogo al abrir para que la primera búsqueda sea instantánea.
+  useEffect(() => {
+    if (isOpen) void ensureCatalog();
+  }, [isOpen, ensureCatalog]);
 
   // Reset state when sheet opens
   useEffect(() => {
