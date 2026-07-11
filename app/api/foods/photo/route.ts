@@ -92,6 +92,17 @@ function numberFrom(value: unknown): number {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
+/** Slug estable a partir del nombre, para deduplicar alimentos de IA por nombre. */
+function slugifyName(name: string): string {
+  return name
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+}
+
 function adminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -209,6 +220,37 @@ export async function POST(request: NextRequest) {
 
   const supabase = adminClient();
 
+  const nameTrim = result.name.trim();
+  const confidence = Math.min(1, Math.max(0, numberFrom(result.confidence)));
+
+  const foodCols =
+    "id, source_food_id, canonical_name, kcal_100g, protein_g_100g, carbs_g_100g, fat_g_100g, fiber_g_100g, default_portion_g, default_portion_name";
+
+  // Dedupe: si ya existe un alimento con ese nombre, reusarlo (priorizando los
+  // verificados/curados) en vez de crear un duplicado. Se conserva la porción
+  // estimada por la IA para abrir el picker en el valor detectado.
+  const { data: existing } = await supabase
+    .from("foods")
+    .select(foodCols)
+    .ilike("canonical_name", nameTrim)
+    .order("is_verified", { ascending: false })
+    .order("id", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) {
+    return NextResponse.json({
+      food: {
+        ...existing,
+        default_portion_name: "porción estimada",
+        default_portion_g: portionG,
+        source_method: "photo",
+      },
+      confidence,
+      reused: true,
+    });
+  }
+
   const { data: source, error: sourceError } = await supabase
     .from("food_sources")
     .upsert(
@@ -232,8 +274,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const sourceFoodId = `photo_${user.id}_${Date.now()}`;
-  const confidence = Math.min(1, Math.max(0, numberFrom(result.confidence)));
+  // ID determinístico por nombre: futuras fotos con el mismo nombre actualizan
+  // esta fila (via onConflict) en vez de crear duplicados.
+  const sourceFoodId = `photo_${slugifyName(nameTrim)}`;
 
   const { data: food, error: foodError } = await supabase
     .from("foods")
@@ -241,7 +284,7 @@ export async function POST(request: NextRequest) {
       {
         source_id: source.id,
         source_food_id: sourceFoodId,
-        canonical_name: result.name.trim(),
+        canonical_name: nameTrim,
         is_generic: true,
         is_recipe: false,
         is_verified: false,
