@@ -7,6 +7,8 @@ import { MultiRing } from "@/components/ui/MultiRing";
 import { Bar } from "@/components/ui/Bar";
 import { useDiary } from "@/hooks/useDiary";
 import { useProfile } from "@/hooks/useProfile";
+import { useWeeklyInsights } from "@/hooks/useWeeklyInsights";
+import type { WeeklyInsights } from "@/lib/insights/weekly";
 
 interface MacroInfo {
   key: string;
@@ -89,12 +91,101 @@ function DistributionBar({ macros }: { macros: MacroInfo[] }) {
   );
 }
 
+const DOW = ["D", "L", "M", "M", "J", "V", "S"];
+
+function WeekStat({ label, value, hint, color }: { label: string; value: string; hint?: string; color?: string }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 9.5, color: "var(--text-3)", letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "var(--font-mono)" }}>
+        {label}
+      </div>
+      <div style={{
+        fontFamily: "var(--font-display)", fontSize: 21, fontWeight: 500,
+        letterSpacing: "-0.03em", color: color ?? "var(--text-1)", lineHeight: 1.1, marginTop: 4,
+      }}>
+        {value}
+      </div>
+      {hint && <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 2, fontFamily: "var(--font-mono)" }}>{hint}</div>}
+    </div>
+  );
+}
+
+function WeeklyInsightsCard({ insights, kcalGoal, weightDelta }: {
+  insights: WeeklyInsights; kcalGoal: number; weightDelta: number | null;
+}) {
+  if (insights.daysLogged === 0) {
+    return (
+      <div style={{
+        background: "var(--bg-1)", border: "1.5px dashed var(--line-2)", borderRadius: 18,
+        padding: 20, textAlign: "center", color: "var(--text-3)", fontSize: 12.5,
+      }}>
+        Registrá comidas durante la semana para ver tus promedios y adherencia.
+      </div>
+    );
+  }
+
+  const maxKcal = Math.max(kcalGoal, ...insights.perDay.map((d) => d.kcal), 1);
+  const vsGoal = insights.avgKcal - kcalGoal;
+
+  return (
+    <div style={{ background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 18, padding: 16 }}>
+      {/* mini gráfico de barras por día vs meta */}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 64 }}>
+        {insights.perDay.map((d, i) => {
+          const h = Math.round((d.kcal / maxKcal) * 100);
+          const onTarget = kcalGoal > 0 && Math.abs(d.kcal - kcalGoal) <= kcalGoal * 0.15;
+          const color = d.kcal === 0 ? "var(--bg-2)" : onTarget ? "var(--lime)" : "var(--blue)";
+          const dow = DOW[new Date(d.date + "T12:00:00").getDay()];
+          return (
+            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, height: "100%", justifyContent: "flex-end" }}>
+              <div style={{ width: "100%", height: `${Math.max(h, 3)}%`, background: color, borderRadius: 4, transition: "height var(--motion-state)" }} />
+              <span style={{ fontSize: 9, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>{dow}</span>
+            </div>
+          );
+        })}
+      </div>
+      {/* línea de meta de referencia */}
+      <div style={{ fontSize: 9.5, color: "var(--text-3)", fontFamily: "var(--font-mono)", textAlign: "right", marginTop: 4 }}>
+        meta {fmtNum(kcalGoal)} kcal
+      </div>
+
+      <div style={{ height: 1, background: "var(--line-1)", margin: "12px 0" }} />
+
+      <div style={{ display: "flex", gap: 10 }}>
+        <WeekStat
+          label="Prom. kcal"
+          value={fmtNum(insights.avgKcal)}
+          hint={`${vsGoal >= 0 ? "+" : ""}${fmtNum(vsGoal)} vs meta`}
+          color={Math.abs(vsGoal) <= kcalGoal * 0.15 ? "var(--lime)" : "var(--text-1)"}
+        />
+        <WeekStat
+          label="En meta"
+          value={`${insights.onTargetDays}/${insights.daysLogged}`}
+          hint={`${insights.adherencePct}% adherencia`}
+          color="var(--lime)"
+        />
+        <WeekStat
+          label="Prom. prot."
+          value={`${insights.avgProtein}g`}
+        />
+        <WeekStat
+          label="Peso 7d"
+          value={weightDelta == null ? "–" : `${weightDelta > 0 ? "+" : ""}${weightDelta}`}
+          hint={weightDelta == null ? "sin datos" : "kg"}
+          color={weightDelta != null && weightDelta < 0 ? "var(--lime)" : "var(--text-1)"}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function MacrosPage() {
   const { totals } = useDiary();
   const { profile } = useProfile();
 
   const kcalGoal    = profile?.daily_target_kcal ?? 2000;
   const proteinGoal = profile?.protein_target_g  ?? 150;
+  const { insights, weightDelta } = useWeeklyInsights(kcalGoal);
   const carbsGoal   = profile?.carbs_target_g    ?? 200;
   const fatGoal     = profile?.fat_target_g      ?? 65;
 
@@ -207,6 +298,21 @@ export default function MacrosPage() {
               })}
             </div>
           </div>
+        </div>
+
+        {/* Insights de la semana */}
+        <SectionHead title="Esta semana" />
+        <div style={{ padding: "0 20px" }}>
+          {insights ? (
+            <WeeklyInsightsCard insights={insights} kcalGoal={kcalGoal} weightDelta={weightDelta} />
+          ) : (
+            <div style={{
+              background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 18,
+              padding: 20, textAlign: "center", color: "var(--text-3)", fontSize: 12.5,
+            }}>
+              Cargando…
+            </div>
+          )}
         </div>
 
         <div style={{ height: 20 }} />
