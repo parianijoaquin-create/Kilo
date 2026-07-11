@@ -27,6 +27,7 @@ import { useToday } from "@/hooks/useToday";
 import { useHabits } from "@/hooks/useHabits";
 import { useWeightLog } from "@/hooks/useWeightLog";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
+import { currentStreak } from "@/lib/habits/streak";
 import type { NutritionSummary } from "@/types";
 
 const MEAL_TYPE_LABELS: Record<string, string> = {
@@ -159,17 +160,18 @@ export default function DashboardPage() {
               {habitPreview.map((h) => {
                 const codeKey = h.code?.toLowerCase() ?? "";
                 const Icon = HABIT_ICON_MAP[codeKey] ?? IconPill;
-                const todayLog = (h as unknown as { habit_logs?: { log_date: string; status: string }[] }).habit_logs?.find(
-                  (l) => l.log_date === todayStr
+                const logs = (h as unknown as { habit_logs?: { log_date: string; status: string }[] }).habit_logs ?? [];
+                const done = logs.some((l) => l.log_date === todayStr && l.status === "done");
+                const streak = currentStreak(
+                  logs.filter((l) => l.status === "done").map((l) => l.log_date)
                 );
-                const done = todayLog?.status === "done";
                 return (
                   <HabitRow
                     key={h.id}
                     Icon={Icon}
                     name={h.title}
                     sub={h.target_value ? `${h.target_value}${h.target_unit ? " " + h.target_unit : ""} · ${h.frequency === "daily" ? "diaria" : h.frequency}` : h.frequency === "daily" ? "diaria" : h.frequency}
-                    streak={0}
+                    streak={streak}
                     done={done}
                     color={done ? "var(--lime)" : "var(--blue)"}
                     onClick={goToHabits}

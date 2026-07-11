@@ -14,6 +14,7 @@ import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 import { SwipeToDelete } from "@/components/ui/SwipeToDelete";
 import { CheckToggle } from "@/components/ui/CheckToggle";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { currentStreak } from "@/lib/habits/streak";
 import type { Habit, HabitColor } from "@/types";
 
 const DAYS = ["L", "M", "M", "J", "V", "S", "D"];
@@ -84,13 +85,7 @@ function buildHabitView(habit: Habit, indexInList: number, week: Date[]): HabitV
   const todayIdx = weekIndex(new Date());
   const doneToday = weekDone[todayIdx];
 
-  // Streak: walk back from today
-  let streak = 0;
-  const cursor = new Date();
-  while (doneByDate.has(ymd(cursor))) {
-    streak++;
-    cursor.setDate(cursor.getDate() - 1);
-  }
+  const streak = currentStreak(doneByDate);
 
   const dose = habit.target_value != null
     ? `${habit.target_value}${habit.target_unit ? " " + habit.target_unit : ""}`
