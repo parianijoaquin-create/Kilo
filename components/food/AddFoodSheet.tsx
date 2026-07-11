@@ -9,6 +9,7 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 import type { IScannerControls } from "@zxing/browser";
 import { searchFoods, type RankableFood } from "@/lib/foodSearch";
+import { portionChips } from "@/lib/portions";
 
 const TABS = ["Frecuentes", "Recientes", "Mis recetas"] as const;
 type Tab = (typeof TABS)[number];
@@ -531,7 +532,41 @@ export function AddFoodSheet() {
               <span style={{ fontSize: 13, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>g</span>
             </div>
 
-            <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            {(() => {
+              const hp = portionChips(pendingFood.default_portion_name, pendingFood.default_portion_g);
+              if (!hp) return null;
+              return (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-mono)", letterSpacing: "0.04em", marginBottom: 6 }}>
+                    {hp.unitLabel.toUpperCase()}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {hp.chips.map((chip) => {
+                      const active = grams === chip.grams;
+                      return (
+                        <button
+                          key={chip.label}
+                          onClick={() => setPortionGrams(String(chip.grams))}
+                          style={{
+                            padding: "6px 14px", borderRadius: 8,
+                            background: active ? "var(--lime)" : "var(--bg-2)",
+                            border: "1px solid var(--line-2)",
+                            color: active ? "#0a0d15" : "var(--text-2)",
+                            fontSize: 12, fontFamily: "var(--font-mono)", cursor: "pointer",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {chip.label}
+                          <span style={{ opacity: 0.6, fontSize: 10, marginLeft: 5 }}>{chip.grams}g</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
               {[50, 100, 150, 200, 250].map((preset) => (
                 <button
                   key={preset}
