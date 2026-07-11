@@ -11,10 +11,8 @@ import { WeightSpark } from "@/components/dashboard/WeightSpark";
 import { MealCard } from "@/components/dashboard/MealCard";
 import {
   IconBell,
-  IconRunner,
   IconPill,
   IconDroplet,
-  IconActivity,
   IconScale,
   IconArrowDown,
   IconPlus,
@@ -26,6 +24,7 @@ import { useDiary } from "@/hooks/useDiary";
 import { useToday } from "@/hooks/useToday";
 import { useHabits } from "@/hooks/useHabits";
 import { useWeightLog } from "@/hooks/useWeightLog";
+import { useWater } from "@/hooks/useWater";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
 import { currentStreak } from "@/lib/habits/streak";
 import type { NutritionSummary } from "@/types";
@@ -71,6 +70,8 @@ export default function DashboardPage() {
   };
   const { habits, toggleHabit } = useHabits();
   const { latestWeight, sparkData } = useWeightLog();
+  const { glasses: water } = useWater(today);
+  const waterGoal = 8;
 
   const goToDiary  = () => router.push("/diary");
   const goToMacros = () => router.push("/macros");
@@ -137,10 +138,13 @@ export default function DashboardPage() {
               Hola, {displayName}<span style={{ color: "var(--lime)" }}>.</span>
             </h1>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button style={iconBtn}><IconBell size={18} color="var(--text-2)" /></button>
-            <button style={iconBtn}><IconRunner size={18} color="var(--lime)" /></button>
-          </div>
+          <button
+            onClick={() => router.push("/profile/reminders")}
+            style={iconBtn}
+            aria-label="Recordatorios"
+          >
+            <IconBell size={18} color="var(--text-2)" />
+          </button>
         </div>
 
         {/* Kcal hero → navega a Diario */}
@@ -198,21 +202,27 @@ export default function DashboardPage() {
           </>
         )}
 
-        {/* Steps + Weight */}
+        {/* Agua + Peso */}
         <div style={{ padding: "16px 20px 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          {/* Steps – placeholder */}
-          <div style={{ background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 18, padding: 14 }}>
+          {/* Agua → navega a Diario */}
+          <div
+            onClick={goToDiary}
+            className="kilo-pressable"
+            style={{ background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 18, padding: 14, cursor: "pointer" }}
+          >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <IconActivity size={18} color="var(--blue)" />
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-3)" }}>–%</span>
+              <IconDroplet size={18} color="var(--blue)" />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-3)" }}>
+                {Math.round((Math.min(water, waterGoal) / waterGoal) * 100)}%
+              </span>
             </div>
             <div style={{ marginTop: 14 }}>
-              <Stat value="–" size={26} />
+              <Stat value={String(water)} unit={`/ ${waterGoal}`} size={26} />
             </div>
             <div style={{ fontSize: 10.5, color: "var(--text-3)", marginTop: 4, marginBottom: 10 }}>
-              pasos / meta 10.000
+              vasos de agua hoy
             </div>
-            <Bar value={0} max={10000} color="var(--blue)" height={4} />
+            <Bar value={Math.min(water, waterGoal)} max={waterGoal} color="var(--blue)" height={4} />
           </div>
 
           {/* Weight → navega a Perfil */}
