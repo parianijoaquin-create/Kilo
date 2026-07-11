@@ -2,13 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerSupabase } from "@/lib/supabase/server";
 import { GoogleGenAI, Type } from "@google/genai";
-import { consumeRateLimit } from "@/lib/rateLimit";
+import { consumeRateLimit, consumeGlobalDailyCap } from "@/lib/rateLimit";
 
 const AI_SOURCE_CODE = "ai_vision";
 const GEMINI_MODEL = "gemini-2.5-flash";
 
 // Per-user rate limit: máx 15 análisis de foto por minuto (persistente en DB).
 const RATE_LIMIT_MAX = 15;
+
+// Tope GLOBAL diario de llamadas a Gemini (todos los usuarios juntos). Es el
+// techo de seguridad para no superar el free tier ni generar ningún cargo.
+// Configurable por env; default conservador. Subilo solo si confirmás el límite
+// diario (RPD) del free tier de tu modelo en https://ai.google.dev/gemini-api/docs/rate-limits
+const GEMINI_DAILY_CAP = Number(process.env.GEMINI_DAILY_CAP ?? "200");
 
 const ALLOWED_MEDIA = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_BYTES = 6 * 1024 * 1024; // 6MB
@@ -136,6 +142,16 @@ export async function POST(request: NextRequest) {
   }
   if (file.size > MAX_BYTES) {
     return NextResponse.json({ error: "La imagen es demasiado grande (máx 6MB)." }, { status: 413 });
+  }
+
+  // Techo global diario: corta TODAS las llamadas a Gemini al llegar al tope,
+  // para no superar el free tier ni generar cargos. Se chequea recién acá,
+  // sobre requests válidas, para no gastar cupo en fotos rechazadas.
+  if (!(await consumeGlobalDailyCap(userClient, "gemini_photo", GEMINI_DAILY_CAP))) {
+    return NextResponse.json(
+      { error: "El análisis por foto alcanzó el límite diario. Probá de nuevo mañana o cargá el alimento manualmente." },
+      { status: 429 }
+    );
   }
 
   const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
