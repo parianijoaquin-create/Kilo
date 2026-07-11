@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToday } from "@/hooks/useToday";
+import { per100FromItem, scaleFromPer100 } from "@/lib/nutrition/scaling";
 
 export interface DiaryFood {
   canonical_name: string;
@@ -154,6 +155,30 @@ export function useDiary(date?: string) {
     return { error: error?.message ?? null };
   }, [targetDate]);
 
+  const updateMealItem = useCallback(async (itemId: string, newGrams: number) => {
+    const grams = Math.round(newGrams);
+    if (!Number.isFinite(grams) || grams <= 0) return { error: "Cantidad inválida" };
+
+    // Buscar el item para conocer su densidad por 100 g.
+    const target = meals.flatMap((m) => m.meal_items).find((i) => i.id === itemId);
+    if (!target) return { error: "Item no encontrado" };
+
+    const patch = { grams, unit: "g", ...scaleFromPer100(per100FromItem(target), grams) };
+
+    // Optimista: aplicar en local y revertir si falla.
+    const prevSnapshot = meals;
+    setMeals((prev) =>
+      prev.map((m) => ({
+        ...m,
+        meal_items: m.meal_items.map((i) => (i.id === itemId ? { ...i, ...patch } : i)),
+      }))
+    );
+
+    const { error } = await supabase.from("meal_items").update(patch).eq("id", itemId);
+    if (error) setMeals(prevSnapshot);
+    return { error: error?.message ?? null };
+  }, [meals]);
+
   const deleteMealItem = useCallback(async (itemId: string) => {
     const { error } = await supabase.from("meal_items").delete().eq("id", itemId);
     if (!error) {
@@ -180,5 +205,5 @@ export function useDiary(date?: string) {
     { kcal: 0, protein: 0, carbs: 0, fat: 0 }
   );
 
-  return { meals, loading, error, totals, addMealItem, deleteMealItem };
+  return { meals, loading, error, totals, addMealItem, updateMealItem, deleteMealItem };
 }

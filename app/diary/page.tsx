@@ -14,6 +14,7 @@ import { useWater } from "@/hooks/useWater";
 import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 import { SwipeToDelete } from "@/components/ui/SwipeToDelete";
 import { WaterGlasses } from "@/components/ui/WaterGlasses";
+import { EditPortionSheet } from "@/components/food/EditPortionSheet";
 import { haptic } from "@/lib/haptics";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
 
@@ -53,10 +54,11 @@ function fmtNum(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
 }
 
-function FoodLogRow({ item, isFirst, isLast }: { item: DiaryItem; isFirst: boolean; isLast: boolean }) {
+function FoodLogRow({ item, isFirst, isLast, onEdit }: { item: DiaryItem; isFirst: boolean; isLast: boolean; onEdit: () => void }) {
   return (
     <div
       className="kilo-item-enter"
+      onClick={onEdit}
       style={{
         background: "var(--bg-1)",
         border: "1px solid var(--line-1)",
@@ -70,6 +72,7 @@ function FoodLogRow({ item, isFirst, isLast }: { item: DiaryItem; isFirst: boole
         alignItems: "center",
         gap: 12,
         position: "relative",
+        cursor: "pointer",
       }}
     >
       <span style={{ fontSize: 22, lineHeight: 1 }}>🍽️</span>
@@ -116,12 +119,14 @@ function MealSection({
   meal,
   onAdd,
   onDeleteItem,
+  onEditItem,
   isPending,
 }: {
   mealType: string;
   meal: DiaryMeal | null;
   onAdd: () => void;
   onDeleteItem: (itemId: string) => void;
+  onEditItem: (item: DiaryItem) => void;
   isPending: (id: string) => boolean;
 }) {
   const items = (meal?.meal_items ?? []).filter((i) => !isPending(i.id));
@@ -194,7 +199,7 @@ function MealSection({
                 label="Borrar"
                 onDelete={() => onDeleteItem(item.id)}
               >
-                <FoodLogRow item={item} isFirst={isFirst} isLast={isLast} />
+                <FoodLogRow item={item} isFirst={isFirst} isLast={isLast} onEdit={() => onEditItem(item)} />
               </SwipeToDelete>
             );
           })}
@@ -228,8 +233,9 @@ export default function DiaryPage() {
   const today = useToday();
   const [selectedDate, setSelectedDate] = useState(today);
   const isToday = selectedDate === today;
-  const { meals, totals, addMealItem, deleteMealItem } = useDiary(selectedDate);
+  const { meals, totals, addMealItem, updateMealItem, deleteMealItem } = useDiary(selectedDate);
   const { remove: removeMealItem, isPending: isItemPending } = useUndoableDelete(deleteMealItem, { label: "Item eliminado" });
+  const [editingItem, setEditingItem] = useState<DiaryItem | null>(null);
   const { glasses: water, setWater } = useWater(selectedDate);
   const { profile } = useProfile();
   const DATE_STRIP = useMemo(() => buildDateStrip(), [today]);
@@ -451,11 +457,18 @@ export default function DiaryPage() {
                 meal={meal}
                 onAdd={() => openSheet(mealType, addFoodToMeal)}
                 onDeleteItem={(itemId) => removeMealItem(itemId)}
+                onEditItem={(item) => setEditingItem(item)}
                 isPending={isItemPending}
               />
             );
           })}
         </div>
+
+        <EditPortionSheet
+          item={editingItem}
+          onClose={() => setEditingItem(null)}
+          onSave={(grams) => updateMealItem(editingItem!.id, grams)}
+        />
 
         {/* Water tracker */}
         <div style={{ padding: "8px 20px 0" }}>
