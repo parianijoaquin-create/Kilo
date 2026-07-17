@@ -112,12 +112,20 @@ export function useDiary(date?: string) {
     if (existing) {
       mealId = existing.id;
     } else {
+      // eaten_at debe caer dentro de targetDate: si estamos viendo hoy usamos la
+      // hora real; si es un día pasado lo anclamos al mediodía de ESE día para que
+      // el item no se registre en la fecha equivocada ni desaparezca al recargar.
+      const eatenAt =
+        targetDate === today
+          ? new Date().toISOString()
+          : `${targetDate}T12:00:00`;
+
       const { data: newMeal, error: mealErr } = await supabase
         .from("meals")
         .insert({
           user_id: user.id,
           meal_type: mealType,
-          eaten_at: new Date().toISOString(),
+          eaten_at: eatenAt,
           capture_method: item.source_method ?? "manual",
         })
         .select()
@@ -153,7 +161,7 @@ export function useDiary(date?: string) {
     }
 
     return { error: error?.message ?? null };
-  }, [targetDate]);
+  }, [targetDate, today]);
 
   const updateMealItem = useCallback(async (itemId: string, newGrams: number) => {
     const grams = Math.round(newGrams);
@@ -181,16 +189,25 @@ export function useDiary(date?: string) {
 
   const deleteMealItem = useCallback(async (itemId: string) => {
     const { error } = await supabase.from("meal_items").delete().eq("id", itemId);
-    if (!error) {
-      setMeals((prev) =>
-        prev.map((m) => ({
+    if (error) return { error: error.message };
+
+    // Si la comida quedó sin items, borramos también la fila `meals` para no
+    // dejar una comida vacía huérfana (que reaparecería como card vacía al recargar).
+    const parent = meals.find((m) => m.meal_items.some((i) => i.id === itemId));
+    if (parent && parent.meal_items.length === 1) {
+      await supabase.from("meals").delete().eq("id", parent.id);
+    }
+
+    setMeals((prev) =>
+      prev
+        .map((m) => ({
           ...m,
           meal_items: m.meal_items.filter((i) => i.id !== itemId),
         }))
-      );
-    }
-    return { error: error?.message ?? null };
-  }, []);
+        .filter((m) => m.meal_items.length > 0)
+    );
+    return { error: null };
+  }, [meals]);
 
   const totals = meals.reduce(
     (acc, meal) => {
