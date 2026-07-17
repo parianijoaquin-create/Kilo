@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useWeightLog } from "@/hooks/useWeightLog";
 import { WeightSpark } from "@/components/dashboard/WeightSpark";
+import { ProgressPhotos } from "@/components/profile/ProgressPhotos";
 
 const SETTINGS_BASE = [
   { Icon: IconTarget,   label: "Objetivos y macros" },
@@ -332,6 +333,9 @@ export default function ProfilePage() {
             </div>
           </>
         )}
+
+        {/* ── Fotos de progreso ── */}
+        <ProgressPhotos defaultWeight={displayWeight} />
 
         {/* Settings list */}
         <SectionHead title="Configuración" />
