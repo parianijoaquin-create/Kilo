@@ -9,6 +9,7 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 import type { IScannerControls } from "@zxing/browser";
 import { searchFoods, type RankableFood } from "@/lib/foodSearch";
+import { suggestFoods, mealSuggestionLabel } from "@/lib/mealSuggestions";
 import { portionChips } from "@/lib/portions";
 
 const TABS = ["Frecuentes", "Recientes", "Mis recetas"] as const;
@@ -27,6 +28,21 @@ function MacroBadge({ label, value, color }: { label: string; value: number; col
     <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--text-2)" }}>
       <span style={{ color, fontWeight: 700 }}>{label}</span> {value}g
     </span>
+  );
+}
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <div style={{
+      padding: "14px 20px 6px",
+      fontSize: 10.5,
+      fontFamily: "var(--font-mono)",
+      letterSpacing: "0.06em",
+      textTransform: "uppercase",
+      color: "var(--text-3)",
+    }}>
+      {label}
+    </div>
   );
 }
 
@@ -110,6 +126,7 @@ export function AddFoodSheet() {
   const [activeTab, setActiveTab] = useState<Tab>("Frecuentes");
   const [query, setQuery] = useState("");
   const [foods, setFoods] = useState<FoodSearchResult[]>([]);
+  const [suggestions, setSuggestions] = useState<FoodSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -160,12 +177,23 @@ export function AddFoodSheet() {
     if (q.length >= 2) {
       await ensureCatalog();
       if (seq !== fetchSeqRef.current) return;
+      setSuggestions([]);
       setFoods(searchFoods(CATALOG_CACHE ?? [], q));
       setLoading(false);
       return;
     }
 
     if (tab === "Frecuentes" || tab === "Recientes") {
+      // Sugerencias por momento del día: sólo en Frecuentes, para acompañar
+      // (o reemplazar, si sos nuevo) a tus alimentos habituales.
+      if (tab === "Frecuentes") {
+        await ensureCatalog();
+        if (seq !== fetchSeqRef.current) return;
+        setSuggestions(suggestFoods(CATALOG_CACHE ?? [], mealId));
+      } else {
+        setSuggestions([]);
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         if (seq !== fetchSeqRef.current) return;
@@ -217,9 +245,10 @@ export function AddFoodSheet() {
 
     // Mis recetas → not implemented yet
     if (seq !== fetchSeqRef.current) return;
+    setSuggestions([]);
     setFoods([]);
     setLoading(false);
-  }, [ensureCatalog]);
+  }, [ensureCatalog, mealId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -245,6 +274,7 @@ export function AddFoodSheet() {
       setManualBarcode("");
       setPendingFood(null);
       setPortionGrams("");
+      setSuggestions([]);
     }
   }, [isOpen]);
 
@@ -437,6 +467,9 @@ export function AddFoodSheet() {
       setAnalyzingPhoto(false);
     }
   }
+
+  const showSuggestions =
+    activeTab === "Frecuentes" && query.length < 2 && suggestions.length > 0;
 
   return (
     <Sheet open={isOpen} onClose={closeSheet} height="82%">
@@ -945,10 +978,25 @@ export function AddFoodSheet() {
               Error al cargar alimentos
             </div>
           </div>
-        ) : foods.length > 0 ? (
-          foods.map((food) => (
-            <FoodRow key={food.id} food={food} onAdd={openPortionPicker} />
-          ))
+        ) : foods.length > 0 || showSuggestions ? (
+          <>
+            {foods.length > 0 && (
+              <>
+                {showSuggestions && <SectionHeader label="Tus frecuentes" />}
+                {foods.map((food) => (
+                  <FoodRow key={food.id} food={food} onAdd={openPortionPicker} />
+                ))}
+              </>
+            )}
+            {showSuggestions && (
+              <>
+                <SectionHeader label={mealSuggestionLabel(mealId)} />
+                {suggestions.map((food) => (
+                  <FoodRow key={`sug-${food.id}`} food={food} onAdd={openPortionPicker} />
+                ))}
+              </>
+            )}
+          </>
         ) : (
           <div style={{
             display: "flex",
