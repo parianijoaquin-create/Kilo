@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 
 export interface WeightEntry {
   id: string;
@@ -11,6 +12,7 @@ export interface WeightEntry {
 }
 
 export function useWeightLog() {
+  const { userId, loading: authLoading } = useAuth();
   const [history, setHistory] = useState<WeightEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -18,16 +20,16 @@ export function useWeightLog() {
   const savingRef = useRef(false);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!userId) { setLoading(false); return; }
+
     let cancelled = false;
 
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-
       const { data } = await supabase
         .from("weight_logs")
         .select("id, weight_kg, logged_at, note")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .order("logged_at", { ascending: false })
         .limit(30);
 
@@ -39,26 +41,21 @@ export function useWeightLog() {
 
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [supabase, userId, authLoading]);
 
   const logWeight = useCallback(async (weight_kg: number, note?: string) => {
     if (savingRef.current) return { error: "Ya se está guardando" };
     if (!weight_kg || weight_kg <= 0) return { error: "Peso inválido" };
 
+    if (!userId) return { error: "No autenticado" };
+
     savingRef.current = true;
     setSaving(true);
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      savingRef.current = false;
-      setSaving(false);
-      return { error: "No autenticado" };
-    }
 
     const { data: newEntry, error: insertErr } = await supabase
       .from("weight_logs")
       .insert({
-        user_id: user.id,
+        user_id: userId,
         weight_kg,
         logged_at: new Date().toISOString(),
         note: note ?? null,
@@ -75,7 +72,7 @@ export function useWeightLog() {
     const { error: profileErr } = await supabase
       .from("profiles")
       .update({ current_weight_kg: weight_kg, updated_at: new Date().toISOString() })
-      .eq("id", user.id);
+      .eq("id", userId);
 
     if (profileErr) {
       savingRef.current = false;
@@ -88,7 +85,7 @@ export function useWeightLog() {
     savingRef.current = false;
     setSaving(false);
     return { error: null };
-  }, []);
+  }, [supabase, userId]);
 
   const latestWeight = history[0]?.weight_kg ?? null;
   const sparkData = history.slice(0, 7).map((e) => e.weight_kg).reverse();

@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Sheet } from "@/components/ui/Sheet";
 import { SectionHead } from "@/components/ui/SectionHead";
-import { IconCamera, IconClose } from "@/components/icons";
+import { IconCamera, IconClose, IconPlus } from "@/components/icons";
 import { useProgressPhotos, type ProgressPhoto } from "@/hooks/useProgressPhotos";
 import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 
@@ -24,7 +24,9 @@ export function ProgressPhotos({ defaultWeight }: { defaultWeight?: number | nul
     { label: "Foto eliminada" }
   );
 
-  const fileRef = useRef<HTMLInputElement | null>(null);
+  const cameraRef = useRef<HTMLInputElement | null>(null);
+  const galleryRef = useRef<HTMLInputElement | null>(null);
+  const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
 
   // Subida: archivo elegido + metadata pendiente de confirmar.
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -98,7 +100,7 @@ export function ProgressPhotos({ defaultWeight }: { defaultWeight?: number | nul
           {/* Botón agregar */}
           {!compareMode && (
             <button
-              onClick={() => fileRef.current?.click()}
+              onClick={() => setSourcePickerOpen(true)}
               disabled={uploading}
               className="kilo-pressable"
               style={{
@@ -165,7 +167,36 @@ export function ProgressPhotos({ defaultWeight }: { defaultWeight?: number | nul
         )}
       </div>
 
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPick} style={{ display: "none" }} />
+      {/* Cámara (capture) y galería (sin capture) por separado, para poder elegir origen. */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={onPick} style={{ display: "none" }} />
+      <input ref={galleryRef} type="file" accept="image/*" onChange={onPick} style={{ display: "none" }} />
+
+      {/* ── Sheet: elegir origen de la foto ── */}
+      <Sheet open={sourcePickerOpen} onClose={() => setSourcePickerOpen(false)} height="auto">
+        <div style={{ padding: "8px 20px 28px" }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 500, letterSpacing: "-0.02em", color: "var(--text-1)", marginBottom: 16 }}>
+            Agregar foto
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <button
+              onClick={() => { setSourcePickerOpen(false); cameraRef.current?.click(); }}
+              className="kilo-pressable"
+              style={sourceBtnStyle}
+            >
+              <IconCamera size={20} color="var(--lime)" />
+              <span>Sacar una foto</span>
+            </button>
+            <button
+              onClick={() => { setSourcePickerOpen(false); galleryRef.current?.click(); }}
+              className="kilo-pressable"
+              style={sourceBtnStyle}
+            >
+              <IconPlus size={20} color="var(--lime)" />
+              <span>Elegir de la galería</span>
+            </button>
+          </div>
+        </div>
+      </Sheet>
 
       {/* ── Sheet: metadata de la nueva foto ── */}
       <Sheet open={!!pendingFile} onClose={closeUpload} height="auto">
@@ -302,4 +333,12 @@ const inputStyle: React.CSSProperties = {
   width: "100%", marginTop: 6, background: "var(--bg-2)",
   border: "1px solid var(--line-2)", borderRadius: 10, color: "var(--text-1)",
   fontFamily: mono, fontSize: 15, padding: "10px 12px", outline: "none", boxSizing: "border-box",
+};
+
+const sourceBtnStyle: React.CSSProperties = {
+  display: "flex", alignItems: "center", gap: 12,
+  width: "100%", padding: "14px 16px",
+  background: "var(--bg-2)", border: "1px solid var(--line-2)", borderRadius: 14,
+  color: "var(--text-1)", fontSize: 14.5, fontWeight: 500, fontFamily: "var(--font-body)",
+  cursor: "pointer", textAlign: "left",
 };

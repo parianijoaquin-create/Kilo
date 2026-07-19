@@ -3,9 +3,11 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToday } from "@/hooks/useToday";
+import { useAuth } from "@/context/AuthContext";
 import type { Habit, HabitLog, HabitLogStatus } from "@/types";
 
 export function useHabits() {
+  const { userId, loading: authLoading } = useAuth();
   const [habits, setHabits] = useState<Habit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -13,19 +15,19 @@ export function useHabits() {
   const today = useToday();
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!userId) { setLoading(false); return; }
+
     let cancelled = false;
 
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-
       const { data, error } = await supabase
         .from("habits")
         .select(`
           id, user_id, code, title, target_value, target_unit, frequency, is_active, created_at,
           habit_logs!left ( id, habit_id, user_id, logged_at, log_date, value, status, note, created_at )
         `)
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("is_active", true)
         .order("created_at", { ascending: true });
 
@@ -38,11 +40,10 @@ export function useHabits() {
 
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [supabase, userId, authLoading]);
 
   const toggleHabit = useCallback(async (habitId: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { error: "No autenticado" };
+    if (!userId) return { error: "No autenticado" };
 
     const habit = habits.find((h) => h.id === habitId);
     if (!habit) return { error: "Hábito no encontrado" };
@@ -74,7 +75,7 @@ export function useHabits() {
     } else {
       const { data: newLog, error } = await supabase
         .from("habit_logs")
-        .insert({ habit_id: habitId, user_id: user.id, logged_at: new Date().toISOString(), status: "done" })
+        .insert({ habit_id: habitId, user_id: userId, logged_at: new Date().toISOString(), status: "done" })
         .select()
         .single();
 
@@ -89,11 +90,10 @@ export function useHabits() {
       }
       return { error: error?.message ?? null };
     }
-  }, [habits, today]);
+  }, [supabase, userId, habits, today]);
 
   const createHabit = useCallback(async (habit: Partial<Habit>) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { error: "No autenticado" };
+    if (!userId) return { error: "No autenticado" };
 
     const payload = {
       title: habit.title,
@@ -101,7 +101,7 @@ export function useHabits() {
       target_value: habit.target_value,
       target_unit: habit.target_unit,
       frequency: habit.frequency ?? "daily",
-      user_id: user.id,
+      user_id: userId,
       is_active: true,
     };
 
@@ -115,7 +115,7 @@ export function useHabits() {
       setHabits((prev) => [...prev, { ...(data as Habit), habit_logs: [] }]);
     }
     return { error: error?.message ?? null };
-  }, []);
+  }, [supabase, userId]);
 
   const deleteHabit = useCallback(async (habitId: string) => {
     const { error } = await supabase

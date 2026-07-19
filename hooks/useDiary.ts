@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToday } from "@/hooks/useToday";
+import { useAuth } from "@/context/AuthContext";
+import { readCache, writeCache, useIsoLayoutEffect } from "@/lib/localCache";
 import { per100FromItem, scaleFromPer100 } from "@/lib/nutrition/scaling";
 
 export interface DiaryFood {
@@ -38,18 +40,39 @@ export interface DiaryMeal {
 export function useDiary(date?: string) {
   const today = useToday();
   const targetDate = date ?? today;
+  const { userId, loading: authLoading } = useAuth();
   const [meals, setMeals] = useState<DiaryMeal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
+  const cacheKey = `kilo:meals:${targetDate}`;
+
+  // Actualiza el estado y persiste en caché en el mismo paso, para que al volver
+  // a entrar las comidas (y las calorías) aparezcan al instante desde local.
+  const commitMeals = useCallback((
+    updater: DiaryMeal[] | ((prev: DiaryMeal[]) => DiaryMeal[]),
+  ) => {
+    setMeals((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCache(cacheKey, next);
+      return next;
+    });
+  }, [cacheKey]);
+
+  // Hidrata las comidas cacheadas de esta fecha antes del primer paint.
+  useIsoLayoutEffect(() => {
+    const cached = readCache<DiaryMeal[]>(cacheKey);
+    setMeals(cached ?? []);
+  }, [cacheKey]);
+
   useEffect(() => {
+    if (authLoading) return;
+    if (!userId) { setLoading(false); return; }
+
     let cancelled = false;
 
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-
       const { data, error } = await supabase
         .from("meals")
         .select(`
@@ -60,13 +83,13 @@ export function useDiary(date?: string) {
             foods ( canonical_name, kcal_100g, protein_g_100g, carbs_g_100g, fat_g_100g )
           )
         `)
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .gte("eaten_at", `${targetDate}T00:00:00`)
         .lte("eaten_at", `${targetDate}T23:59:59`)
         .order("eaten_at", { ascending: true });
 
       if (!cancelled) {
-        setMeals((data as unknown as DiaryMeal[]) ?? []);
+        commitMeals((data as unknown as DiaryMeal[]) ?? []);
         setError(error?.message ?? null);
         setLoading(false);
       }
@@ -74,7 +97,7 @@ export function useDiary(date?: string) {
 
     load();
     return () => { cancelled = true; };
-  }, [targetDate]);
+  }, [supabase, userId, authLoading, targetDate, commitMeals]);
 
   const addMealItem = useCallback(async (
     mealType: string,
@@ -93,14 +116,13 @@ export function useDiary(date?: string) {
       raw_estimation?: Record<string, unknown>;
     }
   ) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { error: "No autenticado" };
+    if (!userId) return { error: "No autenticado" };
 
     // Fetch authoritative meal from DB (avoids races where local state lags behind concurrent inserts)
     const { data: existingMeals } = await supabase
       .from("meals")
       .select("id")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("meal_type", mealType)
       .gte("eaten_at", `${targetDate}T00:00:00`)
       .lte("eaten_at", `${targetDate}T23:59:59`)
@@ -123,7 +145,7 @@ export function useDiary(date?: string) {
       const { data: newMeal, error: mealErr } = await supabase
         .from("meals")
         .insert({
-          user_id: user.id,
+          user_id: userId,
           meal_type: mealType,
           eaten_at: eatenAt,
           capture_method: item.source_method ?? "manual",
@@ -152,7 +174,7 @@ export function useDiary(date?: string) {
         .eq("id", mealId)
         .single();
       if (!fetchErr && data) {
-        setMeals((prev) =>
+        commitMeals((prev) =>
           prev.some((m) => m.id === mealId)
             ? prev.map((m) => (m.id === mealId ? (data as unknown as DiaryMeal) : m))
             : [...prev, data as unknown as DiaryMeal]
@@ -161,7 +183,7 @@ export function useDiary(date?: string) {
     }
 
     return { error: error?.message ?? null };
-  }, [targetDate, today]);
+  }, [supabase, userId, targetDate, today, commitMeals]);
 
   const updateMealItem = useCallback(async (itemId: string, newGrams: number) => {
     const grams = Math.round(newGrams);
@@ -175,7 +197,7 @@ export function useDiary(date?: string) {
 
     // Optimista: aplicar en local y revertir si falla.
     const prevSnapshot = meals;
-    setMeals((prev) =>
+    commitMeals((prev) =>
       prev.map((m) => ({
         ...m,
         meal_items: m.meal_items.map((i) => (i.id === itemId ? { ...i, ...patch } : i)),
@@ -183,9 +205,9 @@ export function useDiary(date?: string) {
     );
 
     const { error } = await supabase.from("meal_items").update(patch).eq("id", itemId);
-    if (error) setMeals(prevSnapshot);
+    if (error) commitMeals(prevSnapshot);
     return { error: error?.message ?? null };
-  }, [meals]);
+  }, [supabase, meals, commitMeals]);
 
   const deleteMealItem = useCallback(async (itemId: string) => {
     const { error } = await supabase.from("meal_items").delete().eq("id", itemId);
@@ -198,7 +220,7 @@ export function useDiary(date?: string) {
       await supabase.from("meals").delete().eq("id", parent.id);
     }
 
-    setMeals((prev) =>
+    commitMeals((prev) =>
       prev
         .map((m) => ({
           ...m,
@@ -207,7 +229,7 @@ export function useDiary(date?: string) {
         .filter((m) => m.meal_items.length > 0)
     );
     return { error: null };
-  }, [meals]);
+  }, [supabase, meals, commitMeals]);
 
   const totals = meals.reduce(
     (acc, meal) => {

@@ -47,9 +47,9 @@ const HABIT_ICON_MAP: Record<string, typeof IconPill> = {
 export default function DashboardPage() {
   const router = useRouter();
   const { openSheet } = useSheet();
-  const { profile } = useProfile();
+  const { profile, loading: profileLoading } = useProfile();
   const today = useToday();
-  const { meals, totals, addMealItem } = useDiary(today);
+  const { meals, totals, loading: diaryLoading, addMealItem } = useDiary(today);
 
   const addFoodToMeal = async (food: FoodSearchResult, mealType: string, gramsOverride?: number) => {
     const grams = gramsOverride ?? food.default_portion_g ?? 100;
@@ -117,6 +117,11 @@ export default function DashboardPage() {
   const todayStr = today;
   const weightKg = profile?.current_weight_kg;
 
+  // Skeletons sólo en el primer uso sin dato cacheado; si hay caché, se muestra
+  // el valor real al instante y estos flags ya vienen en false.
+  const nameLoading = !profile && profileLoading;
+  const kcalLoading = diaryLoading && meals.length === 0;
+
   return (
     <AppShell>
       <Screen scrollKey="dash">
@@ -135,7 +140,11 @@ export default function DashboardPage() {
               letterSpacing: "-0.03em", lineHeight: 1.05, color: "var(--text-1)",
               margin: 0, whiteSpace: "nowrap",
             }}>
-              Hola, {displayName}<span style={{ color: "var(--lime)" }}>.</span>
+              {nameLoading ? (
+                <span className="kilo-skeleton" style={{ display: "inline-block", width: 150, height: 26, borderRadius: 8, verticalAlign: "middle" }} />
+              ) : (
+                <>Hola, {displayName}<span style={{ color: "var(--lime)" }}>.</span></>
+              )}
             </h1>
           </div>
           <button
@@ -149,7 +158,11 @@ export default function DashboardPage() {
 
         {/* Kcal hero → navega a Diario */}
         <div style={{ padding: "20px 20px 0" }}>
-          <KcalHeroCard kcalLogged={Math.round(totals.kcal)} kcalGoal={kcalGoal} onClick={goToDiary} />
+          {kcalLoading ? (
+            <div className="kilo-skeleton" style={{ height: 168, borderRadius: 22 }} />
+          ) : (
+            <KcalHeroCard kcalLogged={Math.round(totals.kcal)} kcalGoal={kcalGoal} onClick={goToDiary} />
+          )}
         </div>
 
         {/* Macro mini cards → navegan a Macros */}
