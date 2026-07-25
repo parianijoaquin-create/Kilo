@@ -35,6 +35,8 @@ export function Sheet({ open, onClose, children, height = "78%" }: SheetProps) {
           width: "100%",
           maxWidth: 390,
           height,
+          maxHeight: "calc(100dvh - 24px)",
+          paddingBottom: "env(safe-area-inset-bottom)",
           background: "var(--bg-1)",
           borderTop: "1px solid var(--line-1)",
           borderTopLeftRadius: 28,
@@ -47,10 +49,12 @@ export function Sheet({ open, onClose, children, height = "78%" }: SheetProps) {
           overflow: "hidden",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 4px" }}>
+        <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 4px", flexShrink: 0 }}>
           <div style={{ width: 40, height: 4, background: "var(--line-2)", borderRadius: 2 }} />
         </div>
-        {children}
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+          {children}
+        </div>
       </div>
     </>
   );
