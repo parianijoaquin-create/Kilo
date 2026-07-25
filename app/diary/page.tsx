@@ -16,6 +16,7 @@ import { SwipeToDelete } from "@/components/ui/SwipeToDelete";
 import { WaterGlasses } from "@/components/ui/WaterGlasses";
 import { EditPortionSheet } from "@/components/food/EditPortionSheet";
 import { haptic } from "@/lib/haptics";
+import { foodEmoji } from "@/lib/foodEmoji";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
 
 const STANDARD_MEALS = ["morning", "lunch", "snack", "dinner"] as const;
@@ -75,7 +76,7 @@ function FoodLogRow({ item, isFirst, isLast, onEdit }: { item: DiaryItem; isFirs
         cursor: "pointer",
       }}
     >
-      <span style={{ fontSize: 22, lineHeight: 1 }}>🍽️</span>
+      <span style={{ fontSize: 22, lineHeight: 1 }}>{foodEmoji(item.item_name_snapshot)}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
           {item.item_name_snapshot}

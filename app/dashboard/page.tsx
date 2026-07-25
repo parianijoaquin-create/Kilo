@@ -27,6 +27,7 @@ import { useWeightLog } from "@/hooks/useWeightLog";
 import { useWater } from "@/hooks/useWater";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
 import { currentStreak } from "@/lib/habits/streak";
+import { foodEmoji } from "@/lib/foodEmoji";
 import type { NutritionSummary } from "@/types";
 
 const MEAL_TYPE_LABELS: Record<string, string> = {
@@ -103,7 +104,7 @@ export default function DashboardPage() {
     items: m.meal_items.map((item) => ({
       id: item.id,
       name: item.item_name_snapshot,
-      emoji: "🍽️",
+      emoji: foodEmoji(item.item_name_snapshot),
       portion: item.grams ? `${item.grams}g` : "–",
       kcal: Math.round(item.calories_kcal ?? 0),
       p: Math.round(item.protein_g ?? 0),
