@@ -1,37 +1,26 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { User } from "@supabase/supabase-js";
+import { useAuth as useAuthContext } from "@/context/AuthContext";
 
-interface AuthState {
-  user: User | null;
-  loading: boolean;
-}
-
+/**
+ * Acciones de auth (signIn/signUp/signOut) sobre el estado COMPARTIDO del
+ * AuthContext. El estado (userId/loading) sale de un único getSession +
+ * onAuthStateChange (ver context/AuthContext); acá no hacemos getUser() ni
+ * montamos otro listener, para no duplicar round-trips ni suscripciones.
+ */
 export function useAuth() {
-  const [state, setState] = useState<AuthState>({ user: null, loading: true });
+  const { userId, loading } = useAuthContext();
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setState({ user: data.user, loading: false });
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setState({ user: session?.user ?? null, loading: false });
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (!error) router.push("/dashboard");
     return { error };
-  }, []);
+  }, [supabase, router]);
 
   const signUp = useCallback(async (email: string, password: string, displayName?: string) => {
     const { error } = await supabase.auth.signUp({
@@ -41,12 +30,12 @@ export function useAuth() {
     });
     if (!error) router.push("/onboarding");
     return { error };
-  }, []);
+  }, [supabase, router]);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     router.push("/login");
-  }, []);
+  }, [supabase, router]);
 
-  return { ...state, signIn, signUp, signOut };
+  return { userId, loading, signIn, signUp, signOut };
 }
