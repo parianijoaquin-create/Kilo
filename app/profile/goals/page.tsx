@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { Screen } from "@/components/layout/Screen";
 import { SectionHead } from "@/components/ui/SectionHead";
-import { IconChevronLeft, IconScale, IconTarget } from "@/components/icons";
+import { IconChevronLeft, IconScale, IconTarget, IconDroplet } from "@/components/icons";
 import { useProfile } from "@/hooks/useProfile";
 import { useWeightLog } from "@/hooks/useWeightLog";
 import { useToast } from "@/context/ToastContext";
@@ -49,6 +49,25 @@ const inputStyle: React.CSSProperties = {
 
 function fmtDate(d: Date) {
   return d.toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function stepBtn(disabled: boolean): React.CSSProperties {
+  return {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    background: "var(--bg-2)",
+    border: "1px solid var(--line-2)",
+    color: "var(--text-1)",
+    fontSize: 20,
+    fontWeight: 600,
+    lineHeight: 1,
+    cursor: disabled ? "default" : "pointer",
+    opacity: disabled ? 0.4 : 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
 }
 
 export default function GoalsPage() {
@@ -137,6 +156,24 @@ export default function GoalsPage() {
     const { error } = await logWeight(kg);
     showToast({ message: error ? `Error: ${error}` : "Peso registrado ✓" });
     if (!error) setWeightInput("");
+  }
+
+  // ── Meta de agua ────────────────────────────────────────────────────
+  const [waterGoalLocal, setWaterGoalLocal] = useState<number | null>(null);
+  const [savingWater, setSavingWater] = useState(false);
+  const waterGoal = waterGoalLocal ?? profile?.water_goal_glasses ?? 8;
+
+  async function changeWaterGoal(next: number) {
+    const clamped = Math.min(20, Math.max(1, next));
+    if (clamped === waterGoal) return;
+    setWaterGoalLocal(clamped);
+    setSavingWater(true);
+    const { error } = await updateProfile({ water_goal_glasses: clamped });
+    setSavingWater(false);
+    if (error) {
+      setWaterGoalLocal(null); // revertir el optimista si falla
+      showToast({ message: `Error: ${error}` });
+    }
   }
 
   const macroRows: { key: "p" | "c" | "f"; label: string; color: string; pct: number; set: (n: number) => void; g: number }[] = [
@@ -314,6 +351,43 @@ export default function GoalsPage() {
                 >
                   {savingWeight ? "…" : "Guardar"}
                 </button>
+              </div>
+            </div>
+
+            {/* ── Meta de agua ── */}
+            <SectionHead title="Hidratación" />
+            <div style={{ padding: "0 20px" }}>
+              <div style={{ ...card, display: "flex", alignItems: "center", gap: 12 }}>
+                <IconDroplet size={20} color="var(--blue)" />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text-1)" }}>Meta diaria</div>
+                  <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
+                    {savingWater ? "Guardando…" : "vasos de agua por día"}
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <button
+                    onClick={() => changeWaterGoal(waterGoal - 1)}
+                    disabled={savingWater || waterGoal <= 1}
+                    aria-label="Menos"
+                    className="kilo-pressable"
+                    style={stepBtn(savingWater || waterGoal <= 1)}
+                  >
+                    −
+                  </button>
+                  <span style={{ minWidth: 28, textAlign: "center", fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 500, color: "var(--text-1)" }}>
+                    {waterGoal}
+                  </span>
+                  <button
+                    onClick={() => changeWaterGoal(waterGoal + 1)}
+                    disabled={savingWater || waterGoal >= 20}
+                    aria-label="Más"
+                    className="kilo-pressable"
+                    style={stepBtn(savingWater || waterGoal >= 20)}
+                  >
+                    +
+                  </button>
+                </div>
               </div>
             </div>
 

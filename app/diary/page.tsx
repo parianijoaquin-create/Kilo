@@ -246,8 +246,8 @@ export default function DiaryPage() {
   const carbsGoal   = profile?.carbs_target_g    ?? 200;
   const fatGoal     = profile?.fat_target_g      ?? 65;
 
-  const waterGoal = 8; // vasos visibles por ciclo
-  const waterMax = 16; // máximo diario
+  const waterGoal = profile?.water_goal_glasses ?? 8; // meta diaria (configurable en Objetivos)
+  const waterMax = Math.max(16, waterGoal * 2); // tope diario, siempre ≥ meta
 
   const addFoodToMeal = useCallback(async (food: FoodSearchResult, mealType: string, gramsOverride?: number) => {
     const grams = gramsOverride ?? food.default_portion_g ?? 100;

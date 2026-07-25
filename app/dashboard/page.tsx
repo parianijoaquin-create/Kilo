@@ -72,7 +72,7 @@ export default function DashboardPage() {
   const { habits, toggleHabit } = useHabits();
   const { latestWeight, sparkData } = useWeightLog();
   const { glasses: water } = useWater(today);
-  const waterGoal = 8;
+  const waterGoal = profile?.water_goal_glasses ?? 8;
 
   const goToDiary  = () => router.push("/diary");
   const goToMacros = () => router.push("/macros");

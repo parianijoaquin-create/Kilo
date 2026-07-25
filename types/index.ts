@@ -71,6 +71,7 @@ export interface Profile {
   protein_target_g?: number;
   carbs_target_g?: number;
   fat_target_g?: number;
+  water_goal_glasses?: number;
   onboarding_completed: boolean;
   created_at: string;
   updated_at: string;
