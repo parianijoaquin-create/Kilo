@@ -290,6 +290,11 @@ export function AddFoodSheet() {
       setSuggestions([]);
       setReviewComponents(null);
       setReplacingIndex(null);
+      setPhotoHint("");
+      setPendingPhoto((prev) => {
+        if (prev) URL.revokeObjectURL(prev.url);
+        return null;
+      });
     }
   }, [isOpen]);
 
@@ -447,6 +452,11 @@ export function AddFoodSheet() {
   // Índice del componente que se está reemplazando vía el buscador (o null).
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
 
+  // Foto tomada esperando confirmación: mostramos preview + campo opcional para
+  // que el usuario aclare qué es (ej: "milanesas de cerdo") antes de analizar.
+  const [pendingPhoto, setPendingPhoto] = useState<{ file: File; url: string } | null>(null);
+  const [photoHint, setPhotoHint] = useState<string>("");
+
   function openPortionPicker(food: FoodSearchResult) {
     const seq = ++portionPickerSeqRef.current;
     setPendingFood(food);
@@ -532,7 +542,7 @@ export function AddFoodSheet() {
     closeSheet();
   }
 
-  async function analyzePhoto(file: File) {
+  async function analyzePhoto(file: File, hint?: string) {
     if (analyzingPhoto || adding) return;
     setAnalyzingPhoto(true);
     setScannerStatus("lookup");
@@ -541,6 +551,8 @@ export function AddFoodSheet() {
     try {
       const form = new FormData();
       form.append("photo", file);
+      const trimmedHint = hint?.trim();
+      if (trimmedHint) form.append("hint", trimmedHint);
       const res = await fetch("/api/foods/photo", { method: "POST", body: form });
       const payload = await res.json();
 
@@ -578,6 +590,11 @@ export function AddFoodSheet() {
       setScannerMessage(err instanceof Error ? err.message : "No pudimos analizar la foto.");
     } finally {
       setAnalyzingPhoto(false);
+      setPendingPhoto((prev) => {
+        if (prev) URL.revokeObjectURL(prev.url);
+        return null;
+      });
+      setPhotoHint("");
     }
   }
 
@@ -586,6 +603,107 @@ export function AddFoodSheet() {
 
   return (
     <Sheet open={isOpen} onClose={closeSheet} height="82%">
+      {pendingPhoto && !analyzingPhoto && (
+        <div style={{
+          position: "absolute", inset: 0, zIndex: 11,
+          background: "var(--bg-0)",
+          padding: "20px 20px 24px",
+          display: "flex", flexDirection: "column",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{
+              fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 500,
+              letterSpacing: "-0.02em", color: "var(--text-1)",
+            }}>
+              Confirmá la foto
+            </div>
+            <button
+              onClick={() => {
+                URL.revokeObjectURL(pendingPhoto.url);
+                setPendingPhoto(null);
+                setPhotoHint("");
+              }}
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: "var(--text-3)", fontSize: 13, fontFamily: "var(--font-body)",
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+
+          <div style={{
+            marginTop: 14,
+            borderRadius: 16,
+            overflow: "hidden",
+            background: "#050814",
+            aspectRatio: "4 / 3",
+            flexShrink: 0,
+          }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={pendingPhoto.url}
+              alt="Foto de la comida"
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+          </div>
+
+          <label style={{
+            marginTop: 18, marginBottom: 6,
+            fontSize: 12.5, color: "var(--text-2)", fontFamily: "var(--font-body)", fontWeight: 500,
+          }}>
+            ¿Algún detalle? (opcional)
+          </label>
+          <input
+            value={photoHint}
+            onChange={(e) => setPhotoHint(e.target.value.slice(0, 200))}
+            placeholder="ej: milanesas de cerdo, sin salsa"
+            style={{
+              height: 44,
+              borderRadius: 12,
+              border: "1px solid var(--line-2)",
+              background: "var(--bg-1)",
+              color: "var(--text-1)",
+              padding: "0 14px",
+              fontSize: 14,
+              fontFamily: "var(--font-body)",
+              outline: "none",
+            }}
+          />
+          <div style={{ marginTop: 6, fontSize: 11.5, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>
+            Ayudá a la IA a identificar bien la comida. Ella igual estima la porción por la foto.
+          </div>
+
+          <div style={{ flex: 1 }} />
+
+          <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
+            <button
+              className="kilo-pressable"
+              onClick={() => photoInputRef.current?.click()}
+              style={{
+                flex: 1, height: 48, borderRadius: 14,
+                background: "var(--bg-2)", border: "1px solid var(--line-2)",
+                color: "var(--text-2)", fontSize: 14, fontWeight: 600,
+                fontFamily: "var(--font-body)", cursor: "pointer",
+              }}
+            >
+              Repetir foto
+            </button>
+            <button
+              className="kilo-pressable"
+              onClick={() => void analyzePhoto(pendingPhoto.file, photoHint)}
+              style={{
+                flex: 2, height: 48, borderRadius: 14, border: "none",
+                background: "var(--lime)", color: "#0a0d15",
+                fontSize: 14, fontWeight: 700, fontFamily: "var(--font-body)", cursor: "pointer",
+              }}
+            >
+              Analizar foto
+            </button>
+          </div>
+        </div>
+      )}
+
       {reviewComponents && replacingIndex == null && (() => {
         const includedCount = reviewComponents.filter((c) => c.included && Number(c.grams) > 0).length;
         const totalKcal = reviewComponents.reduce((acc, c) => {
@@ -1111,7 +1229,13 @@ export function AddFoodSheet() {
           const file = e.target.files?.[0];
           e.currentTarget.value = "";
           if (!file) return;
-          void analyzePhoto(file);
+          setPendingPhoto((prev) => {
+            if (prev) URL.revokeObjectURL(prev.url);
+            return { file, url: URL.createObjectURL(file) };
+          });
+          setPhotoHint("");
+          setScannerStatus("idle");
+          setScannerMessage(null);
         }}
       />
 
