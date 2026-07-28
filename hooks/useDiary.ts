@@ -6,6 +6,7 @@ import { useToday } from "@/hooks/useToday";
 import { useAuth } from "@/context/AuthContext";
 import { readCache, writeCache, useIsoLayoutEffect } from "@/lib/localCache";
 import { per100FromItem, scaleFromPer100 } from "@/lib/nutrition/scaling";
+import { localDayRangeUtc, localNoonUtc } from "@/lib/date";
 
 export interface DiaryFood {
   canonical_name: string;
@@ -73,6 +74,7 @@ export function useDiary(date?: string) {
     let cancelled = false;
 
     async function load() {
+      const { start, end } = localDayRangeUtc(targetDate);
       const { data, error } = await supabase
         .from("meals")
         .select(`
@@ -84,8 +86,8 @@ export function useDiary(date?: string) {
           )
         `)
         .eq("user_id", userId)
-        .gte("eaten_at", `${targetDate}T00:00:00`)
-        .lte("eaten_at", `${targetDate}T23:59:59`)
+        .gte("eaten_at", start)
+        .lte("eaten_at", end)
         .order("eaten_at", { ascending: true });
 
       if (!cancelled) {
@@ -119,13 +121,14 @@ export function useDiary(date?: string) {
     if (!userId) return { error: "No autenticado" };
 
     // Fetch authoritative meal from DB (avoids races where local state lags behind concurrent inserts)
+    const { start: dayStart, end: dayEnd } = localDayRangeUtc(targetDate);
     const { data: existingMeals } = await supabase
       .from("meals")
       .select("id")
       .eq("user_id", userId)
       .eq("meal_type", mealType)
-      .gte("eaten_at", `${targetDate}T00:00:00`)
-      .lte("eaten_at", `${targetDate}T23:59:59`)
+      .gte("eaten_at", dayStart)
+      .lte("eaten_at", dayEnd)
       .limit(1);
 
     const existing = existingMeals?.[0] as { id: string } | undefined;
@@ -135,12 +138,13 @@ export function useDiary(date?: string) {
       mealId = existing.id;
     } else {
       // eaten_at debe caer dentro de targetDate: si estamos viendo hoy usamos la
-      // hora real; si es un día pasado lo anclamos al mediodía de ESE día para que
-      // el item no se registre en la fecha equivocada ni desaparezca al recargar.
+      // hora real; si es un día pasado lo anclamos al mediodía LOCAL de ESE día
+      // (convertido a UTC) para que el item no se registre en la fecha equivocada
+      // ni desaparezca al recargar, sin importar la zona horaria del usuario.
       const eatenAt =
         targetDate === today
           ? new Date().toISOString()
-          : `${targetDate}T12:00:00`;
+          : localNoonUtc(targetDate);
 
       const { data: newMeal, error: mealErr } = await supabase
         .from("meals")
