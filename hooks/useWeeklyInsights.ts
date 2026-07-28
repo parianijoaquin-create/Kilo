@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToday } from "@/hooks/useToday";
+import { useAuth } from "@/context/AuthContext";
+import { localDayRangeUtc, toLocalDate } from "@/lib/date";
 import {
   computeWeeklyInsights, weightTrendKg,
   type DayNutrition, type WeeklyInsights,
@@ -16,37 +18,44 @@ type MealRow = {
 /** Insights de los últimos 7 días (hoy incluido) para una meta de kcal dada. */
 export function useWeeklyInsights(kcalGoal: number) {
   const today = useToday();
+  const { userId, loading: authLoading } = useAuth();
   const [insights, setInsights] = useState<WeeklyInsights | null>(null);
   const [weightDelta, setWeightDelta] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!userId) { setLoading(false); return; }
+
     let cancelled = false;
 
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-
       // 7 fechas locales: hoy y los 6 días anteriores.
       const dates: string[] = [];
       for (let i = 6; i >= 0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
-        dates.push(d.toLocaleDateString("en-CA"));
+        dates.push(toLocalDate(d));
       }
 
-      const { data: meals } = await supabase
+      const { data: meals, error: mealsErr } = await supabase
         .from("meals")
         .select("eaten_at, meal_items ( calories_kcal, protein_g )")
-        .eq("user_id", user.id)
-        .gte("eaten_at", `${dates[0]}T00:00:00`)
-        .lte("eaten_at", `${dates[dates.length - 1]}T23:59:59`);
+        .eq("user_id", userId)
+        .gte("eaten_at", localDayRangeUtc(dates[0]).start)
+        .lte("eaten_at", localDayRangeUtc(dates[dates.length - 1]).end);
+
+      if (mealsErr) {
+        if (!cancelled) { setError(mealsErr.message); setLoading(false); }
+        return;
+      }
 
       const byDate = new Map<string, { kcal: number; protein: number }>();
       for (const d of dates) byDate.set(d, { kcal: 0, protein: 0 });
       for (const m of (meals ?? []) as MealRow[]) {
-        const day = new Date(m.eaten_at).toLocaleDateString("en-CA");
+        const day = toLocalDate(new Date(m.eaten_at));
         const bucket = byDate.get(day);
         if (!bucket) continue;
         for (const it of m.meal_items ?? []) {
@@ -63,10 +72,11 @@ export function useWeeklyInsights(kcalGoal: number) {
       const { data: weights } = await supabase
         .from("weight_logs")
         .select("weight_kg, logged_at")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .order("logged_at", { ascending: true });
 
       if (cancelled) return;
+      setError(null);
       setInsights(computeWeeklyInsights(perDay, kcalGoal));
       setWeightDelta(weightTrendKg((weights ?? []) as Array<{ weight_kg: number; logged_at: string }>, new Date(), 7));
       setLoading(false);
@@ -74,7 +84,7 @@ export function useWeeklyInsights(kcalGoal: number) {
 
     load();
     return () => { cancelled = true; };
-  }, [today, kcalGoal]);
+  }, [supabase, userId, authLoading, today, kcalGoal]);
 
-  return { insights, weightDelta, loading };
+  return { insights, weightDelta, loading, error };
 }

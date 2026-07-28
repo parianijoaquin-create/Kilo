@@ -5,6 +5,7 @@ import { Screen } from "@/components/layout/Screen";
 import { SectionHead } from "@/components/ui/SectionHead";
 import { MultiRing } from "@/components/ui/MultiRing";
 import { Bar } from "@/components/ui/Bar";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { useDiary } from "@/hooks/useDiary";
 import { useProfile } from "@/hooks/useProfile";
 import { useWeeklyInsights } from "@/hooks/useWeeklyInsights";
@@ -180,12 +181,12 @@ function WeeklyInsightsCard({ insights, kcalGoal, weightDelta }: {
 }
 
 export default function MacrosPage() {
-  const { totals } = useDiary();
+  const { totals, error: diaryError } = useDiary();
   const { profile } = useProfile();
 
   const kcalGoal    = profile?.daily_target_kcal ?? 2000;
   const proteinGoal = profile?.protein_target_g  ?? 150;
-  const { insights, weightDelta } = useWeeklyInsights(kcalGoal);
+  const { insights, weightDelta, error: insightsError } = useWeeklyInsights(kcalGoal);
   const carbsGoal   = profile?.carbs_target_g    ?? 200;
   const fatGoal     = profile?.fat_target_g      ?? 65;
 
@@ -225,6 +226,16 @@ export default function MacrosPage() {
             Distribución de tus {fmtNum(kcalGoal)} kcal · {profile?.goal_type ?? "—"}
           </div>
         </div>
+
+        {diaryError && (
+          <div style={{ padding: "16px 20px 0" }}>
+            <ErrorBanner
+              title="No pudimos sincronizar tus datos"
+              message="Los totales pueden estar desactualizados. Revisá tu conexión."
+              onRetry={() => window.location.reload()}
+            />
+          </div>
+        )}
 
         {/* Hero ring */}
         <div style={{ padding: "20px 20px 0" }}>
@@ -305,6 +316,12 @@ export default function MacrosPage() {
         <div style={{ padding: "0 20px" }}>
           {insights ? (
             <WeeklyInsightsCard insights={insights} kcalGoal={kcalGoal} weightDelta={weightDelta} />
+          ) : insightsError ? (
+            <ErrorBanner
+              title="No pudimos cargar tus insights de la semana"
+              message={insightsError}
+              onRetry={() => window.location.reload()}
+            />
           ) : (
             <div style={{
               background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 18,

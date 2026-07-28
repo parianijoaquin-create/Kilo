@@ -19,6 +19,7 @@ import {
 } from "@/components/icons";
 import { Stat } from "@/components/ui/Stat";
 import { Bar } from "@/components/ui/Bar";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { useProfile } from "@/hooks/useProfile";
 import { useDiary } from "@/hooks/useDiary";
 import { useToday } from "@/hooks/useToday";
@@ -48,9 +49,9 @@ const HABIT_ICON_MAP: Record<string, typeof IconPill> = {
 export default function DashboardPage() {
   const router = useRouter();
   const { openSheet } = useSheet();
-  const { profile, loading: profileLoading } = useProfile();
+  const { profile, loading: profileLoading, error: profileError } = useProfile();
   const today = useToday();
-  const { meals, totals, loading: diaryLoading, addMealItem } = useDiary(today);
+  const { meals, totals, loading: diaryLoading, error: diaryError, addMealItem } = useDiary(today);
 
   const addFoodToMeal = async (food: FoodSearchResult, mealType: string, gramsOverride?: number) => {
     const grams = gramsOverride ?? food.default_portion_g ?? 100;
@@ -156,6 +157,18 @@ export default function DashboardPage() {
             <IconBell size={18} color="var(--text-2)" />
           </button>
         </div>
+
+        {/* Aviso si falló la sincronización con el servidor (los datos que se ven
+            pueden venir de caché local). */}
+        {(diaryError || profileError) && (
+          <div style={{ padding: "16px 20px 0" }}>
+            <ErrorBanner
+              title="No pudimos sincronizar tus datos"
+              message="Puede que estés viendo información desactualizada. Revisá tu conexión."
+              onRetry={() => window.location.reload()}
+            />
+          </div>
+        )}
 
         {/* Kcal hero → navega a Diario */}
         <div style={{ padding: "20px 20px 0" }}>
