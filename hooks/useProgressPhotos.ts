@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 import { resizeImage } from "@/lib/imageResize";
 
 const BUCKET = "progress-photos";
@@ -23,6 +24,7 @@ interface NewPhoto {
 }
 
 export function useProgressPhotos() {
+  const { userId, loading: authLoading } = useAuth();
   const [photos, setPhotos] = useState<ProgressPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -31,16 +33,16 @@ export function useProgressPhotos() {
   const uploadingRef = useRef(false);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!userId) { setLoading(false); return; }
+
     let cancelled = false;
 
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-
       const { data, error: qErr } = await supabase
         .from("progress_photos")
         .select("id, storage_path, taken_at, weight_kg, note")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .order("taken_at", { ascending: false });
 
       if (cancelled) return;
@@ -65,7 +67,7 @@ export function useProgressPhotos() {
 
     load();
     return () => { cancelled = true; };
-  }, [supabase]);
+  }, [supabase, userId, authLoading]);
 
   const addPhoto = useCallback(async (file: File, meta: NewPhoto = {}) => {
     if (uploadingRef.current) return { error: "Ya se está subiendo una foto" };
@@ -74,11 +76,10 @@ export function useProgressPhotos() {
     setError(null);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return { error: "No autenticado" };
+      if (!userId) return { error: "No autenticado" };
 
       const blob = await resizeImage(file);
-      const path = `${user.id}/${crypto.randomUUID()}.jpg`;
+      const path = `${userId}/${crypto.randomUUID()}.jpg`;
 
       const { error: upErr } = await supabase.storage
         .from(BUCKET)
@@ -88,7 +89,7 @@ export function useProgressPhotos() {
       const { data: row, error: insErr } = await supabase
         .from("progress_photos")
         .insert({
-          user_id: user.id,
+          user_id: userId,
           storage_path: path,
           taken_at: new Date().toISOString(),
           weight_kg: meta.weight_kg ?? null,
@@ -117,7 +118,7 @@ export function useProgressPhotos() {
       uploadingRef.current = false;
       setUploading(false);
     }
-  }, [supabase]);
+  }, [supabase, userId]);
 
   const deletePhoto = useCallback(async (id: string) => {
     const target = photos.find((p) => p.id === id);

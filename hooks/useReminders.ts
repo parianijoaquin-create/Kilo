@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 
 export type ReminderKind = "meal" | "water" | "habit" | "weight" | "custom";
 
@@ -18,22 +19,23 @@ export interface Reminder {
 }
 
 export function useReminders() {
+  const { userId, loading: authLoading } = useAuth();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!userId) { setLoading(false); return; }
+
     let cancelled = false;
 
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-
       const { data, error: err } = await supabase
         .from("reminders")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .order("time_of_day", { ascending: true });
 
       if (!cancelled) {
@@ -45,21 +47,20 @@ export function useReminders() {
 
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [supabase, userId, authLoading]);
 
   const createReminder = useCallback(async (payload: Omit<Reminder, "id" | "user_id" | "created_at" | "updated_at">) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { error: "No autenticado" };
+    if (!userId) return { error: "No autenticado" };
 
     const { data, error: err } = await supabase
       .from("reminders")
-      .insert({ ...payload, user_id: user.id })
+      .insert({ ...payload, user_id: userId })
       .select()
       .single();
 
     if (!err && data) setReminders((prev) => [...prev, data as Reminder]);
     return { error: err?.message ?? null };
-  }, []);
+  }, [supabase, userId]);
 
   const updateReminder = useCallback(async (id: string, patch: Partial<Reminder>) => {
     const { data, error: err } = await supabase
