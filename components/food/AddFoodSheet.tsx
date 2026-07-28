@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Sheet } from "@/components/ui/Sheet";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
+import { useAuth } from "@/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
 import { IconSearch, IconCamera, IconBarcode, IconClose } from "@/components/icons";
 import { BrowserMultiFormatReader } from "@zxing/browser";
@@ -22,6 +23,17 @@ let CATALOG_CACHE: RankableFood[] | null = null;
 
 type ScannerMode = "idle" | "camera" | "manual";
 type ScannerStatus = "idle" | "requesting" | "scanning" | "lookup" | "success" | "error";
+
+// Un componente detectado por la foto, ya resuelto contra el catálogo (o creado
+// como alimento de IA), listo para revisar/editar antes de agregar al diario.
+type ReviewComponent = {
+  food: FoodSearchResult;
+  detectedName: string;
+  matched: boolean;      // true si se linkeó a un alimento del catálogo
+  isVerified: boolean;   // true si el alimento matcheado está verificado
+  grams: string;         // gramos editables por el usuario
+  included: boolean;     // si se agrega al diario
+};
 
 function MacroBadge({ label, value, color }: { label: string; value: number; color: string }) {
   return (
@@ -141,6 +153,7 @@ export function AddFoodSheet() {
   const scanInFlightRef = useRef(false);
   const lookupRef = useRef<(barcode: string) => void>(() => {});
   const supabase = useMemo(() => createClient(), []);
+  const { userId } = useAuth();
 
   const fetchSeqRef = useRef(0);
   const catalogLoadingRef = useRef<Promise<void> | null>(null);
@@ -275,6 +288,8 @@ export function AddFoodSheet() {
       setPendingFood(null);
       setPortionGrams("");
       setSuggestions([]);
+      setReviewComponents(null);
+      setReplacingIndex(null);
     }
   }, [isOpen]);
 
@@ -421,11 +436,46 @@ export function AddFoodSheet() {
   const [pendingFood, setPendingFood] = useState<FoodSearchResult | null>(null);
   const [portionGrams, setPortionGrams] = useState<string>("");
   const [aiConfidence, setAiConfidence] = useState<number | null>(null);
+  // "history" cuando prellenamos con la porción que el usuario suele usar para
+  // este alimento (más confiable que cualquier estimación de la IA).
+  const [portionSource, setPortionSource] = useState<"default" | "history">("default");
+  const portionPickerSeqRef = useRef(0);
+
+  // Revisión multi-item del análisis por foto: el plato separado en componentes.
+  const [reviewComponents, setReviewComponents] = useState<ReviewComponent[] | null>(null);
+  const [reviewDishName, setReviewDishName] = useState<string>("");
+  // Índice del componente que se está reemplazando vía el buscador (o null).
+  const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
 
   function openPortionPicker(food: FoodSearchResult) {
+    const seq = ++portionPickerSeqRef.current;
     setPendingFood(food);
     setPortionGrams(String(food.default_portion_g ?? 100));
     setAiConfidence(null);
+    setPortionSource("default");
+
+    // Memoria de porción típica: si el usuario ya cargó este alimento antes,
+    // arrancamos en su última porción real en vez del estimado/genérico.
+    if (userId && food.id) {
+      void (async () => {
+        const { data } = await supabase
+          .from("meal_items")
+          .select("grams, meals!inner(user_id, eaten_at)")
+          .eq("meals.user_id", userId)
+          .eq("food_id", food.id)
+          .not("grams", "is", null)
+          .order("eaten_at", { referencedTable: "meals", ascending: false })
+          .limit(1)
+          .maybeSingle();
+        // Ignorar si el picker cambió mientras tanto (otra selección).
+        if (portionPickerSeqRef.current !== seq) return;
+        const lastGrams = data?.grams;
+        if (typeof lastGrams === "number" && lastGrams > 0) {
+          setPortionGrams(String(Math.round(lastGrams)));
+          setPortionSource("history");
+        }
+      })();
+    }
   }
 
   async function confirmPortion() {
@@ -436,6 +486,49 @@ export function AddFoodSheet() {
     await addItemFn(pendingFood, mealId, grams);
     setAdding(false);
     setPendingFood(null);
+    closeSheet();
+  }
+
+  // Tap sobre un resultado de búsqueda: si estamos reemplazando un componente de
+  // la revisión por foto, sustituimos ese alimento; si no, abrimos el picker.
+  function handleFoodRowTap(food: FoodSearchResult) {
+    if (replacingIndex != null) {
+      setReviewComponents((prev) => {
+        if (!prev) return prev;
+        const next = [...prev];
+        const cur = next[replacingIndex];
+        if (cur) {
+          next[replacingIndex] = {
+            ...cur,
+            food,
+            detectedName: food.canonical_name,
+            matched: true,
+            isVerified: false,
+            grams: String(food.default_portion_g ?? (Number(cur.grams) || 100)),
+          };
+        }
+        return next;
+      });
+      setReplacingIndex(null);
+      setQuery("");
+      return;
+    }
+    openPortionPicker(food);
+  }
+
+  async function addAllComponents() {
+    if (!addItemFn || !mealId || adding || !reviewComponents) return;
+    const toAdd = reviewComponents.filter((c) => {
+      const g = Number(c.grams);
+      return c.included && Number.isFinite(g) && g > 0;
+    });
+    if (toAdd.length === 0) return;
+    setAdding(true);
+    for (const c of toAdd) {
+      await addItemFn(c.food, mealId, Math.round(Number(c.grams)));
+    }
+    setAdding(false);
+    setReviewComponents(null);
     closeSheet();
   }
 
@@ -455,11 +548,31 @@ export function AddFoodSheet() {
         throw new Error(payload?.error ?? "No pudimos analizar la foto.");
       }
 
-      const food = payload.food as FoodSearchResult;
-      setScannerStatus("success");
-      setScannerMessage(`Detectamos: ${food.canonical_name}. Revisá la porción.`);
-      openPortionPicker(food);
+      const rawComponents = Array.isArray(payload.components) ? payload.components : [];
+      const components: ReviewComponent[] = rawComponents
+        .filter((c: unknown): c is Record<string, unknown> => !!c && typeof c === "object" && !!(c as { food?: unknown }).food)
+        .map((c: Record<string, unknown>) => {
+          const food = c.food as FoodSearchResult;
+          return {
+            food,
+            detectedName: typeof c.detected_name === "string" ? c.detected_name : food.canonical_name,
+            matched: !!c.matched,
+            isVerified: !!c.is_verified,
+            grams: String(Math.round(Number(c.estimated_g) || food.default_portion_g || 100)),
+            included: true,
+          };
+        });
+
+      if (components.length === 0) {
+        throw new Error("No reconocimos comida en la foto. Probá con otra toma.");
+      }
+
+      setReviewDishName(typeof payload.dish_name === "string" ? payload.dish_name : "");
       setAiConfidence(typeof payload.confidence === "number" ? payload.confidence : null);
+      setReviewComponents(components);
+      setReplacingIndex(null);
+      setScannerStatus("success");
+      setScannerMessage(null);
     } catch (err) {
       setScannerStatus("error");
       setScannerMessage(err instanceof Error ? err.message : "No pudimos analizar la foto.");
@@ -473,6 +586,176 @@ export function AddFoodSheet() {
 
   return (
     <Sheet open={isOpen} onClose={closeSheet} height="82%">
+      {reviewComponents && replacingIndex == null && (() => {
+        const includedCount = reviewComponents.filter((c) => c.included && Number(c.grams) > 0).length;
+        const totalKcal = reviewComponents.reduce((acc, c) => {
+          if (!c.included) return acc;
+          const g = Number(c.grams) || 0;
+          return acc + (c.food.kcal_100g ?? 0) * (g / 100);
+        }, 0);
+        const setComp = (i: number, patch: Partial<ReviewComponent>) =>
+          setReviewComponents((prev) => {
+            if (!prev) return prev;
+            const next = [...prev];
+            next[i] = { ...next[i], ...patch };
+            return next;
+          });
+        return (
+          <div style={{
+            position: "absolute", inset: 0, zIndex: 10,
+            background: "var(--bg-0)",
+            padding: "20px 20px 24px",
+            display: "flex", flexDirection: "column",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{
+                fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 500,
+                letterSpacing: "-0.02em", color: "var(--text-1)",
+              }}>
+                Revisá los alimentos
+              </div>
+              <button
+                onClick={() => { setReviewComponents(null); setScannerStatus("idle"); }}
+                style={{
+                  width: 32, height: 32, borderRadius: 10,
+                  background: "var(--bg-2)", border: "none", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <IconClose size={16} color="var(--text-2)" />
+              </button>
+            </div>
+
+            <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              {reviewDishName && (
+                <span style={{ fontSize: 12.5, color: "var(--text-2)" }}>{reviewDishName}</span>
+              )}
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "3px 9px", borderRadius: 999,
+                background: "color-mix(in srgb, var(--orange) 14%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--orange) 35%, transparent)",
+              }}>
+                <IconCamera size={11} color="var(--orange)" />
+                <span style={{ fontSize: 10.5, fontFamily: "var(--font-mono)", color: "var(--orange)", fontWeight: 600 }}>
+                  IA{aiConfidence != null ? ` · ${Math.round(aiConfidence * 100)}%` : ""}
+                </span>
+              </span>
+            </div>
+
+            <div style={{ marginTop: 14, flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+              {reviewComponents.map((c, i) => {
+                const g = Number(c.grams) || 0;
+                const kcal = Math.round((c.food.kcal_100g ?? 0) * (g / 100));
+                return (
+                  <div key={`${c.food.id}-${i}`} style={{
+                    padding: 12, borderRadius: 14,
+                    background: c.included ? "var(--bg-1)" : "var(--bg-0)",
+                    border: "1px solid var(--line-1)",
+                    opacity: c.included ? 1 : 0.5,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <button
+                        onClick={() => setComp(i, { included: !c.included })}
+                        aria-label={c.included ? "Excluir" : "Incluir"}
+                        style={{
+                          width: 24, height: 24, borderRadius: 7, flexShrink: 0, cursor: "pointer",
+                          background: c.included ? "var(--lime)" : "var(--bg-2)",
+                          border: "1px solid var(--line-2)",
+                          color: "#0a0d15", fontSize: 14, fontWeight: 700,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                        }}
+                      >{c.included ? "✓" : ""}</button>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {c.food.canonical_name}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+                          <span style={{
+                            fontSize: 9.5, fontFamily: "var(--font-mono)", fontWeight: 600,
+                            padding: "1px 6px", borderRadius: 999,
+                            background: c.matched ? "color-mix(in srgb, var(--lime) 14%, transparent)" : "color-mix(in srgb, var(--text-3) 14%, transparent)",
+                            color: c.matched ? "var(--lime)" : "var(--text-3)",
+                          }}>
+                            {c.isVerified ? "verificado" : c.matched ? "de tu catálogo" : "estimado IA"}
+                          </span>
+                          <span style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>{kcal} kcal</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                      <button
+                        onClick={() => setComp(i, { grams: String(Math.max(0, g - 10)) })}
+                        style={{ width: 34, height: 34, borderRadius: 10, background: "var(--bg-2)", border: "1px solid var(--line-2)", color: "var(--text-1)", fontSize: 16, cursor: "pointer" }}
+                      >−</button>
+                      <input
+                        value={c.grams}
+                        onChange={(e) => setComp(i, { grams: e.target.value.replace(/[^\d.]/g, "") })}
+                        inputMode="decimal"
+                        style={{
+                          width: 72, height: 34, textAlign: "center",
+                          background: "var(--bg-2)", border: "1px solid var(--line-2)",
+                          borderRadius: 10, color: "var(--text-1)",
+                          fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, outline: "none",
+                        }}
+                      />
+                      <button
+                        onClick={() => setComp(i, { grams: String(g + 10) })}
+                        style={{ width: 34, height: 34, borderRadius: 10, background: "var(--bg-2)", border: "1px solid var(--line-2)", color: "var(--text-1)", fontSize: 16, cursor: "pointer" }}
+                      >+</button>
+                      <span style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>g</span>
+                      <button
+                        onClick={() => { setReplacingIndex(i); setQuery(""); }}
+                        style={{
+                          marginLeft: "auto", padding: "6px 12px", borderRadius: 10,
+                          background: "var(--bg-2)", border: "1px solid var(--line-2)",
+                          color: "var(--text-2)", fontSize: 11.5, fontWeight: 600, cursor: "pointer",
+                        }}
+                      >Cambiar</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{
+              marginTop: 14, padding: 14,
+              background: "var(--bg-1)", border: "1px solid var(--line-1)",
+              borderRadius: 14, display: "flex", justifyContent: "space-between", alignItems: "center",
+            }}>
+              <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.05em", textTransform: "uppercase", fontFamily: "var(--font-mono)" }}>
+                Total ({includedCount})
+              </div>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 500, color: "var(--lime)", letterSpacing: "-0.03em" }}>
+                {Math.round(totalKcal)}<span style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 400 }}> kcal</span>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 12, display: "flex", gap: 10 }}>
+              <button
+                onClick={() => { setReviewComponents(null); setScannerStatus("idle"); }}
+                style={{
+                  flex: 1, height: 48, borderRadius: 14,
+                  background: "var(--bg-2)", border: "1px solid var(--line-2)",
+                  color: "var(--text-2)", fontSize: 13.5, fontWeight: 500, cursor: "pointer",
+                }}
+              >Cancelar</button>
+              <button
+                onClick={addAllComponents}
+                disabled={adding || includedCount === 0}
+                style={{
+                  flex: 2, height: 48, borderRadius: 14,
+                  background: "var(--lime)", border: "none",
+                  color: "#0a0d15", fontSize: 13.5, fontWeight: 700,
+                  cursor: adding || includedCount === 0 ? "default" : "pointer",
+                  opacity: adding || includedCount === 0 ? 0.5 : 1,
+                }}
+              >{adding ? "Agregando…" : `Agregar ${includedCount} ${includedCount === 1 ? "alimento" : "alimentos"}`}</button>
+            </div>
+          </div>
+        );
+      })()}
+
       {pendingFood && (() => {
         const grams = Number(portionGrams) || 0;
         const f = grams / 100;
@@ -530,6 +813,19 @@ export function AddFoodSheet() {
             {pendingFood.default_portion_name && (
               <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2, fontFamily: "var(--font-mono)" }}>
                 Porción de ref: {pendingFood.default_portion_name} ({pendingFood.default_portion_g ?? 100}g)
+              </div>
+            )}
+            {portionSource === "history" && (
+              <div style={{
+                marginTop: 6,
+                display: "inline-flex", alignItems: "center", gap: 6, alignSelf: "flex-start",
+                padding: "3px 9px", borderRadius: 999,
+                background: "color-mix(in srgb, var(--lime) 14%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--lime) 35%, transparent)",
+              }}>
+                <span style={{ fontSize: 10.5, fontFamily: "var(--font-mono)", color: "var(--lime)", fontWeight: 600 }}>
+                  Tu porción habitual
+                </span>
               </div>
             )}
 
@@ -707,6 +1003,23 @@ export function AddFoodSheet() {
           <IconClose size={16} color="var(--text-2)" />
         </button>
       </div>
+
+      {/* Banner de reemplazo de componente (flujo revisión por foto) */}
+      {replacingIndex != null && (
+        <div style={{
+          margin: "10px 20px 0", padding: "8px 12px", flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+          background: "color-mix(in srgb, var(--lime) 12%, transparent)",
+          border: "1px solid color-mix(in srgb, var(--lime) 35%, transparent)",
+          borderRadius: 12,
+        }}>
+          <span style={{ fontSize: 12, color: "var(--text-1)" }}>Elegí el alimento de reemplazo</span>
+          <button
+            onClick={() => { setReplacingIndex(null); setQuery(""); }}
+            style={{ background: "none", border: "none", color: "var(--text-3)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+          >Volver</button>
+        </div>
+      )}
 
       {/* Search */}
       <div style={{ padding: "12px 20px 0", flexShrink: 0 }}>
@@ -984,7 +1297,7 @@ export function AddFoodSheet() {
               <>
                 {showSuggestions && <SectionHeader label="Tus frecuentes" />}
                 {foods.map((food) => (
-                  <FoodRow key={food.id} food={food} onAdd={openPortionPicker} />
+                  <FoodRow key={food.id} food={food} onAdd={handleFoodRowTap} />
                 ))}
               </>
             )}
@@ -992,7 +1305,7 @@ export function AddFoodSheet() {
               <>
                 <SectionHeader label={mealSuggestionLabel(mealId)} />
                 {suggestions.map((food) => (
-                  <FoodRow key={`sug-${food.id}`} food={food} onAdd={openPortionPicker} />
+                  <FoodRow key={`sug-${food.id}`} food={food} onAdd={handleFoodRowTap} />
                 ))}
               </>
             )}
