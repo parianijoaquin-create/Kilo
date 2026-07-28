@@ -200,10 +200,13 @@ export async function POST(request: NextRequest) {
   }
 
   let file: File | null = null;
+  let hint = "";
   try {
     const form = await request.formData();
     const value = form.get("photo");
     if (value instanceof File) file = value;
+    const rawHint = form.get("hint");
+    if (typeof rawHint === "string") hint = rawHint.trim().slice(0, 200);
   } catch {
     return NextResponse.json({ error: "No pudimos leer la imagen." }, { status: 400 });
   }
@@ -241,7 +244,11 @@ export async function POST(request: NextRequest) {
           role: "user",
           parts: [
             { inlineData: { mimeType: file.type, data: base64 } },
-            { text: "Identificá este alimento y estimá sus calorías y macros." },
+            {
+              text: hint
+                ? `Identificá este alimento y estimá sus calorías y macros.\n\nEl usuario aclaró qué es: "${hint}". Tomá esa aclaración como la identidad correcta del/los alimento(s) (tiene prioridad sobre lo que creas ver) y usala para elegir los componentes y sus macros. Seguí estimando porción y gramos a partir de la imagen.`
+                : "Identificá este alimento y estimá sus calorías y macros.",
+            },
           ],
         },
       ],
