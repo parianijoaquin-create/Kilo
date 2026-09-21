@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ClientProviders } from "@/components/layout/ClientProviders";
+import { ClientErrorMonitor } from "@/components/layout/ClientErrorMonitor";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -59,6 +62,9 @@ export default function RootLayout({
     >
       <body>
         <ClientProviders>{children}</ClientProviders>
+        <ClientErrorMonitor />
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

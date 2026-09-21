@@ -18,7 +18,7 @@ _Fecha original: 2026-07-27 · Actualización: 2026-09-20 · Alcance: backend (S
 ## Resumen ejecutivo
 
 La base está **sólida y por encima del promedio** para un proyecto en esta etapa: las políticas RLS están
-definidas en el repositorio (su endurecimiento final aún debe aplicarse en producción), los secrets están fuera del repo, hay rate limiting real en las rutas de IA/red, y un
+definidas y endurecidas en producción, los secrets están fuera del repo, hay rate limiting real en las rutas de IA/red, y un
 patrón de fetching bien pensado (`useAuth` compartido + caché local). **No encontré hallazgos críticos**
 (agujeros de seguridad ni cosas que rompan datos de forma grave). Lo que hay para mejorar es sobre todo
 **consistencia** (mezclaste dos patrones de auth) y **escalabilidad de un par de piezas del frontend**.
@@ -129,6 +129,9 @@ ceros sin avisar. En una app de uso diario eso se lee como "se borraron mis dato
 
 ---
 
-_Sin cambios aplicados — esto es sólo el diagnóstico. Decime por cuál arrancamos y lo implemento (sugerencia:
-_Los cambios locales y la migración de seguridad de Supabase están aplicados y verificados. Pendiente únicamente:
-repetir la auditoría autenticada contra la instancia correcta._
+## Estado al 2026-09-21
+
+Los cambios de seguridad y confiabilidad documentados en esta auditoría están aplicados y publicados. La
+migración de endurecimiento de Supabase fue ejecutada y verificada. El único control funcional pendiente es
+repetir la batería autenticada con una cuenta que pertenezca a la instancia de Supabase conectada, sin alterar
+los datos permanentes del usuario.

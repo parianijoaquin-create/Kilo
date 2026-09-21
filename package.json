@@ -16,6 +16,8 @@
     "@lottiefiles/dotlottie-react": "^0.13.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
     "next": "16.3.5",
