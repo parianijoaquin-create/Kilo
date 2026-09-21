@@ -1,6 +1,6 @@
 # Auditoría técnica — Kilo
 
-_Fecha original: 2026-07-27 · Actualización: 2026-09-20 · Alcance: backend (Supabase), frontend, UX y seguridad._
+_Fecha original: 2026-07-27 · Actualización: 2026-09-21 · Alcance: backend (Supabase), frontend, UX, seguridad y observabilidad._
 
 > **Estado actual.** Los hallazgos prioritarios y la mayoría de los secundarios ya fueron corregidos en el
 > código: autenticación compartida, fechas locales, errores visibles, caché por usuario, recuperación de
@@ -135,3 +135,15 @@ Los cambios de seguridad y confiabilidad documentados en esta auditoría están 
 migración de endurecimiento de Supabase fue ejecutada y verificada. El único control funcional pendiente es
 repetir la batería autenticada con una cuenta que pertenezca a la instancia de Supabase conectada, sin alterar
 los datos permanentes del usuario.
+
+### Observabilidad y control móvil
+
+- Vercel Web Analytics y Speed Insights están habilitados e integrados en el layout principal.
+- Los errores no controlados del servidor y del navegador se registran automáticamente, de forma estructurada,
+  en Vercel Runtime Logs. Se omiten stacks, cookies, email, user-agent y parámetros de URL para evitar exponer
+  información personal. Una prueba sintética confirmó la recepción del evento en producción.
+- Lighthouse móvil sobre `https://kilo-rho.vercel.app/login`, después de corregir contraste, tamaño táctil,
+  landmarks y `robots.txt`: **Performance 100, Accessibility 100, Best Practices 100 y SEO 100**. Métricas:
+  FCP 1,0 s, LCP 1,7 s, TBT 10 ms, CLS 0 y Speed Index 2,4 s.
+- Lighthouse es una medición de laboratorio con emulación móvil. Speed Insights queda recolectando Web Vitals
+  de teléfonos reales a medida que haya visitas; esos percentiles necesitan tráfico y no aparecen de inmediato.
