@@ -1152,6 +1152,22 @@
     "verified": true
   },
   {
+    "id": "milanesa_de_cerdo",
+    "nombre_es": "Milanesa de cerdo",
+    "categoria": "comida tipica",
+    "tipo": "comida_argentina",
+    "porcion_base": "100 g",
+    "calorias_kcal_per_100": 199,
+    "protein_g_per_100": 20.5,
+    "carbs_g_per_100": 14.5,
+    "fat_g_per_100": 6.5,
+    "fiber_g_per_100": 1.0,
+    "sugar_g_per_100": 1.4,
+    "sodium_mg_per_100": 220,
+    "source": "seed_estimate",
+    "verified": false
+  },
+  {
     "id": "asado",
     "nombre_es": "Asado",
     "categoria": "comida tipica",

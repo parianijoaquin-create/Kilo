@@ -1,5 +1,5 @@
 -- ─── foods_100_seed.sql ───────────────────────────────────────────────────────
--- Seed de 100 alimentos genéricos argentinos provenientes de
+-- Seed del catálogo base de alimentos argentinos proveniente de
 -- Informacion/alimentos_100_kilo.json (fuente SARA2/seed).
 -- Ejecutar DESPUÉS de schema.sql y seeds.sql.
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ INSERT INTO public.food_categories (slug, name, sort_order) VALUES
   ('bebidas',      'Bebidas',            16)
 ON CONFLICT (slug) DO NOTHING;
 
--- ─── 100 alimentos ────────────────────────────────────────────────────────────
+-- ─── Catálogo base de alimentos ───────────────────────────────────────────────
 INSERT INTO public.foods (
   category_id, source_id, source_food_id, canonical_name,
   is_generic, is_verified, verification_status,
@@ -473,7 +473,7 @@ INSERT INTO public.foods (
    581,30.2,10.7,49.0,6.0,1.4,7,'1 cda',15,
    '{"id":"semilla_de_zapallo","nombre_es":"Semilla de zapallo","categoria":"semilla","tipo":"generico","source":"SARA2/seed","verified":true}'::jsonb),
 
--- ── COMIDAS TÍPICAS (12) ──────────────────────────────────────────────────────
+-- ── COMIDAS TÍPICAS (13) ──────────────────────────────────────────────────────
   ((SELECT id FROM public.food_categories WHERE slug='comidas-argentinas'),
    (SELECT id FROM public.food_sources WHERE code='sara2'),
    'milanesa_de_carne_vacuna','Milanesa de carne vacuna',true,true,'verified',
@@ -485,6 +485,12 @@ INSERT INTO public.foods (
    'milanesa_de_pollo','Milanesa de pollo',true,true,'verified',
    172,19.8,14.5,3.9,1.0,1.4,199,'1 porción',100,
    '{"id":"milanesa_de_pollo","nombre_es":"Milanesa de pollo","categoria":"comida tipica","tipo":"comida_argentina","source":"SARA2/seed","verified":true}'::jsonb),
+
+  ((SELECT id FROM public.food_categories WHERE slug='comidas-argentinas'),
+   (SELECT id FROM public.food_sources WHERE code='sara2'),
+   'milanesa_de_cerdo','Milanesa de cerdo',true,false,'draft',
+   199,20.5,14.5,6.5,1.0,1.4,220,'1 porción',100,
+   '{"id":"milanesa_de_cerdo","nombre_es":"Milanesa de cerdo","categoria":"comida tipica","tipo":"comida_argentina","source":"seed_estimate","verified":false}'::jsonb),
 
   ((SELECT id FROM public.food_categories WHERE slug='comidas-argentinas'),
    (SELECT id FROM public.food_sources WHERE code='sara2'),

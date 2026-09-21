@@ -1,4 +1,4 @@
-# Tabla completa de 100 alimentos para Kilo
+# Tabla completa de 101 alimentos para Kilo
 
 Valores nutricionales normalizados principalmente por 100 g o 100 ml según `porcion_base`. Esta base está pensada como seed inicial para desarrollo; revisar contra fuentes oficiales/etiquetas antes de producción.
 
@@ -76,6 +76,7 @@ Valores nutricionales normalizados principalmente por 100 g o 100 ml según `por
 | semilla_de_zapallo | Semilla de zapallo | semilla | generico | 100 g | 581 | 30.2 | 10.7 | 49.0 | 6.0 | 1.4 | 7 | SARA2/seed | True |
 | milanesa_de_carne_vacuna | Milanesa de carne vacuna | comida tipica | comida_argentina | 100 g | 160 | 18.9 | 14.5 | 3.0 | 1.0 | 1.4 | 212 | SARA2/seed | True |
 | milanesa_de_pollo | Milanesa de pollo | comida tipica | comida_argentina | 100 g | 172 | 19.8 | 14.5 | 3.9 | 1.0 | 1.4 | 199 | SARA2/seed | True |
+| milanesa_de_cerdo | Milanesa de cerdo | comida tipica | comida_argentina | 100 g | 199 | 20.5 | 14.5 | 6.5 | 1.0 | 1.4 | 220 | seed_estimate | False |
 | asado | Asado | comida tipica | comida_argentina | 100 g | 240 | 26.1 | 0.0 | 15.1 | 0.0 | 0.0 | 51 | SARA2/proxy | False |
 | choripan | Choripán | comida tipica | comida_argentina | 100 g | 350 | 14.6 | 25.9 | 20.9 | 1.1 | 0.1 | 651 | recipe_estimate | False |
 | empanada_de_carne | Empanada de carne | comida tipica | comida_argentina | 100 g | 253 | 15.0 | 22.2 | 11.6 | 0.9 | 0.5 | 284 | recipe_estimate | False |
