@@ -9,7 +9,7 @@ interface ScreenProps {
   scrollKey?: string | number;
 }
 
-export function Screen({ children, padBottom = 110, padTop = 0, scrollKey }: ScreenProps) {
+export function Screen({ children, padBottom = 100, padTop = 12, scrollKey }: ScreenProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

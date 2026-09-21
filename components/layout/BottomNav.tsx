@@ -30,7 +30,7 @@ export function BottomNav() {
         transform: "translateX(-50%)",
         width: "100%",
         maxWidth: 390,
-        paddingBottom: "max(24px, calc(env(safe-area-inset-bottom, 0px) + 10px))",
+        paddingBottom: "max(12px, env(safe-area-inset-bottom, 0px))",
         paddingTop: 8,
         background: "linear-gradient(to top, var(--bg-0) 0%, var(--bg-0) 60%, transparent)",
         backdropFilter: "blur(20px)",

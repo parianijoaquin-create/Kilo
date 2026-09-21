@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 interface SheetProps {
   open: boolean;
@@ -19,7 +20,10 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
+const subscribeToClient = () => () => {};
+
 export function Sheet({ open, onClose, children, height = "78%", ariaLabel = "Panel" }: SheetProps) {
+  const mounted = useSyncExternalStore(subscribeToClient, () => true, () => false);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const onCloseRef = useRef(onClose);
 
@@ -77,7 +81,9 @@ export function Sheet({ open, onClose, children, height = "78%", ariaLabel = "Pa
     };
   }, [open]);
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <>
       <div
         aria-hidden="true"
@@ -131,6 +137,7 @@ export function Sheet({ open, onClose, children, height = "78%", ariaLabel = "Pa
           {children}
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   );
 }
