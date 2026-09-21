@@ -5,9 +5,11 @@ _Fecha original: 2026-07-27 · Actualización: 2026-09-21 · Alcance: backend (S
 > **Estado actual.** Los hallazgos prioritarios y la mayoría de los secundarios ya fueron corregidos en el
 > código: autenticación compartida, fechas locales, errores visibles, caché por usuario, recuperación de
 > contraseña, PWA segura, accesibilidad, carga diferida del buscador/scanner, copiado de comidas y manejo de
-> fallos optimistas. La compilación, lint, 65 pruebas unitarias y las pruebas públicas E2E pasan. Quedan dos
-> verificaciones externas. La migración `sql/migrations_harden_security.sql` fue aplicada y verificada en
-> Supabase el 2026-09-21. Sólo queda ejecutar la batería autenticada con una cuenta que pertenezca al proyecto conectado.
+> fallos optimistas y onboarding de notificaciones. La compilación, lint, 70 pruebas unitarias y las pruebas
+> públicas E2E pasan. Las migraciones de seguridad y deduplicación de recordatorios fueron aplicadas y
+> verificadas en Supabase el 2026-09-21. También quedaron habilitadas `pg_cron` y `pg_net`. Falta guardar
+> `CRON_SECRET` en Supabase Vault y ejecutar `sql/setup_reminder_cron.sql`; después conviene repetir la batería
+> autenticada con una cuenta que pertenezca al proyecto conectado.
 
 > **Corrección de stack.** El prompt asumía **Vite + React + shadcn/ui**. El proyecto real es
 > **Next.js 16 (App Router) + React 19 + Supabase SSR + Gemini (`@google/genai`) + web-push**, con una
@@ -94,9 +96,9 @@ ceros sin avisar. En una app de uso diario eso se lee como "se borraron mis dato
   `useWeeklyInsights`, `app/diary/page.tsx`, `app/habits/page.tsx` y `lib/habits/streak.ts`. Extraer un
   `lib/date.ts` con `todayLocal()` y `localDayRange(date)` — de paso resuelve el punto #2 en un solo lugar.
 
-- **`cron-send` acepta el secret por query param.** [`app/api/notifications/cron-send/route.ts:79`](app/api/notifications/cron-send/route.ts#L79)
-  lee `?secret=` como fallback. Los query params se filtran en logs de acceso, referrers e historial. Dejar
-  sólo el header `Authorization: Bearer`. Bonus: comparación en tiempo constante para el secreto.
+- **✅ Protección de `cron-send`.** El endpoint sólo acepta `Authorization: Bearer`; se eliminó el secreto por
+  query string y se agregó comparación en tiempo constante. El script de despliegue consulta el secreto desde
+  Supabase Vault en cada ejecución, por lo que nunca queda escrito en el job ni en Git.
 
 - **Caché local parcial.** Sólo `useDiary` y `useProfile` usan `localCache`. Extender el patrón a los otros
   hooks de lectura (agua, hábitos, insights) daría carga instantánea consistente en toda la app — o documentar
@@ -105,12 +107,13 @@ ceros sin avisar. En una app de uso diario eso se lee como "se borraron mis dato
 - **Índices menores.** `meal_items.food_id` y `meal_items.barcode_product_id` no tienen índice; si más adelante
   consultás "en qué comidas usé tal alimento", conviene agregarlos. Hoy no es un problema (las lecturas van por `meal_id`).
 
-- **Accesibilidad (UI propia).** Al no usar shadcn, hay que verificar a mano: `label`/`aria-label` en inputs del
-  sheet, foco visible, contraste, y navegación por teclado en `Sheet`/`Toast`. Vale una pasada con el inspector de accesibilidad.
+- **✅ Accesibilidad pública.** Se corrigieron contraste, tamaños táctiles, landmarks y navegación por teclado
+  del onboarding. Lighthouse móvil da 100. A futuro conviene repetir pruebas manuales en las pantallas
+  autenticadas cuando haya una cuenta válida para la instancia conectada.
 
-- **UX / retención.** Ya tenés lo core cubierto (racha real, agua, recordatorios push, insights semanales). Lo que
-  sumaría fricción-menos: **"copiar comida de ayer"**, edición de porción por unidades comunes (no sólo gramos),
-  y búsqueda con debounce visible. Nada urgente.
+- **UX / retención.** Ya tenés lo core cubierto (racha real, agua, recordatorios push, insights semanales y
+  copiar comidas). Como mejora futura quedaría la edición de porción por unidades comunes (no sólo gramos) y
+  una búsqueda con debounce visible. Nada urgente.
 
 ---
 
@@ -131,10 +134,12 @@ ceros sin avisar. En una app de uso diario eso se lee como "se borraron mis dato
 
 ## Estado al 2026-09-21
 
-Los cambios de seguridad y confiabilidad documentados en esta auditoría están aplicados y publicados. La
-migración de endurecimiento de Supabase fue ejecutada y verificada. El único control funcional pendiente es
-repetir la batería autenticada con una cuenta que pertenezca a la instancia de Supabase conectada, sin alterar
-los datos permanentes del usuario.
+Los cambios de seguridad y confiabilidad documentados en esta auditoría están aplicados y publicados. Las
+migraciones de endurecimiento y `last_sent_at` fueron ejecutadas y verificadas. `pg_cron` y `pg_net` también
+quedaron habilitados. El envío push, la ventana que cruza medianoche y la deduplicación están cubiertos por
+pruebas; el único paso operativo pendiente es guardar `CRON_SECRET` en Vault y ejecutar
+`sql/setup_reminder_cron.sql`. Después corresponde repetir la batería autenticada con una cuenta de la
+instancia conectada, sin alterar sus datos permanentes.
 
 ### Observabilidad y control móvil
 
@@ -147,3 +152,12 @@ los datos permanentes del usuario.
   FCP 1,0 s, LCP 1,7 s, TBT 10 ms, CLS 0 y Speed Index 2,4 s.
 - Lighthouse es una medición de laboratorio con emulación móvil. Speed Insights queda recolectando Web Vitals
   de teléfonos reales a medida que haya visitas; esos percentiles necesitan tráfico y no aparecen de inmediato.
+
+### Recordatorios automáticos
+
+- El endpoint de producción usa `Authorization: Bearer`, VAPID y service role sólo del lado servidor.
+- `last_sent_at` está presente en producción y evita duplicados entre ventanas solapadas.
+- Supabase tiene `pg_cron` y `pg_net` habilitados desde el 2026-09-21.
+- Pendiente deliberado: copiar `CRON_SECRET` de Vercel a un secreto cifrado de Supabase Vault llamado
+  `kilo_cron_secret` y ejecutar [`sql/setup_reminder_cron.sql`](sql/setup_reminder_cron.sql). No se automatizó
+  esa transferencia porque implica mover una credencial privada entre dos servicios.
