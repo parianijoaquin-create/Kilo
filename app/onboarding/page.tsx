@@ -37,19 +37,23 @@ export default function OnboardingPage() {
   const [goalType, setGoalType] = useState<GoalType>("lose");
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>("moderate");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     if (!profile || hydrated) return;
-    if (profile.display_name)        setDisplayName(profile.display_name);
-    if (profile.birth_date)          setBirthYear(profile.birth_date.slice(0, 4));
-    if (profile.sex)                 setSex(profile.sex);
-    if (profile.height_cm != null)   setHeightCm(String(profile.height_cm));
-    if (profile.current_weight_kg)   setWeightKg(String(profile.current_weight_kg));
-    if (profile.goal_weight_kg)      setGoalWeight(String(profile.goal_weight_kg));
-    if (profile.goal_type)           setGoalType(profile.goal_type);
-    if (profile.activity_level)      setActivityLevel(profile.activity_level);
-    setHydrated(true);
+    const frame = window.requestAnimationFrame(() => {
+      if (profile.display_name)        setDisplayName(profile.display_name);
+      if (profile.birth_date)          setBirthYear(profile.birth_date.slice(0, 4));
+      if (profile.sex)                 setSex(profile.sex);
+      if (profile.height_cm != null)   setHeightCm(String(profile.height_cm));
+      if (profile.current_weight_kg)   setWeightKg(String(profile.current_weight_kg));
+      if (profile.goal_weight_kg)      setGoalWeight(String(profile.goal_weight_kg));
+      if (profile.goal_type)           setGoalType(profile.goal_type);
+      if (profile.activity_level)      setActivityLevel(profile.activity_level);
+      setHydrated(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [profile, hydrated]);
 
   const currentYear = new Date().getFullYear();
@@ -59,20 +63,25 @@ export default function OnboardingPage() {
 
   const errors = {
     displayName: !displayName.trim() ? "Necesitamos un nombre" : null,
-    birthYear: birthYear && (yearNum < 1900 || yearNum > currentYear - 10)
-      ? `Año entre 1900 y ${currentYear - 10}` : null,
-    heightCm: heightCm && (heightNum < 100 || heightNum > 250) ? "Altura entre 100 y 250 cm" : null,
-    weightKg: weightKg && (weightNum < 25 || weightNum > 300) ? "Peso entre 25 y 300 kg" : null,
+    birthYear: !birthYear
+      ? "Ingresá tu año de nacimiento"
+      : yearNum < 1900 || yearNum > currentYear - 10
+        ? `Año entre 1900 y ${currentYear - 10}` : null,
+    heightCm: !heightCm
+      ? "Ingresá tu altura"
+      : heightNum < 100 || heightNum > 250 ? "Altura entre 100 y 250 cm" : null,
+    weightKg: !weightKg
+      ? "Ingresá tu peso"
+      : weightNum < 25 || weightNum > 300 ? "Peso entre 25 y 300 kg" : null,
   };
+  const personalComplete = !errors.birthYear && !errors.heightCm && !errors.weightKg;
   const canFinish =
-    displayName.trim().length > 0 &&
-    !!birthYear && !errors.birthYear &&
-    !!heightCm && !errors.heightCm &&
-    !!weightKg && !errors.weightKg;
+    !errors.displayName && personalComplete;
 
   async function handleFinish() {
     if (!canFinish) return;
     setSaving(true);
+    setSaveError(null);
     const birthDate = birthYear ? `${birthYear}-01-01` : undefined;
     const weight = weightKg ? parseFloat(weightKg) : NaN;
     const height = heightCm ? parseFloat(heightCm) : NaN;
@@ -87,7 +96,7 @@ export default function OnboardingPage() {
       macros = defaultMacroTargets(kcalTarget, goalType);
     }
 
-    await updateProfile({
+    const { error } = await updateProfile({
       display_name: displayName || undefined,
       birth_date: birthDate,
       sex,
@@ -102,6 +111,13 @@ export default function OnboardingPage() {
       fat_target_g: macros?.fat_g,
       onboarding_completed: true,
     });
+
+    if (error) {
+      setSaveError("No pudimos guardar tu perfil. Revisá tu conexión e intentá nuevamente.");
+      setSaving(false);
+      return;
+    }
+
     router.push("/dashboard");
   }
 
@@ -134,20 +150,27 @@ export default function OnboardingPage() {
             </div>
 
             <div style={{ marginTop: 48 }}>
-              <label style={labelStyle}>¿Cómo te llamás?</label>
+              <label htmlFor="onboarding-name" style={labelStyle}>¿Cómo te llamás?</label>
               <input
+                id="onboarding-name"
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="Tu nombre"
                 style={inputStyle}
                 autoFocus
+                aria-invalid={!!errors.displayName}
+                aria-describedby={errors.displayName ? "onboarding-name-error" : undefined}
               />
+              {errors.displayName && (
+                <div id="onboarding-name-error" style={fieldErrorStyle}>{errors.displayName}</div>
+              )}
             </div>
 
             <button
               onClick={() => setStep("personal")}
-              style={{ ...primaryBtn, marginTop: 24 }}
+              disabled={!!errors.displayName}
+              style={{ ...primaryBtn, marginTop: 24, opacity: errors.displayName ? 0.5 : 1 }}
             >
               Empezar →
             </button>
@@ -160,15 +183,17 @@ export default function OnboardingPage() {
             <StepHeader current={1} total={3} title="Datos físicos" />
             <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 24 }}>
               <div>
-                <label style={labelStyle}>Año de nacimiento</label>
-                <input type="number" value={birthYear} onChange={(e) => setBirthYear(e.target.value)}
-                  placeholder="1996" min={1930} max={2010} style={inputStyle} />
+                <label htmlFor="onboarding-birth-year" style={labelStyle}>Año de nacimiento</label>
+                <input id="onboarding-birth-year" type="number" value={birthYear} onChange={(e) => setBirthYear(e.target.value)}
+                  placeholder="1996" min={1900} max={currentYear - 10} style={inputStyle}
+                  aria-invalid={!!errors.birthYear} aria-describedby="onboarding-birth-error" />
+                {errors.birthYear && <div id="onboarding-birth-error" style={fieldErrorStyle}>{errors.birthYear}</div>}
               </div>
               <div>
-                <label style={labelStyle}>Sexo biológico</label>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div id="onboarding-sex-label" style={labelStyle}>Sexo biológico</div>
+                <div role="group" aria-labelledby="onboarding-sex-label" style={{ display: "flex", gap: 8 }}>
                   {(["male", "female", "other"] as Sex[]).map((s) => (
-                    <button key={s} onClick={() => setSex(s)} style={{
+                    <button key={s} onClick={() => setSex(s)} aria-pressed={sex === s} style={{
                       ...toggleBtn,
                       flex: 1,
                       borderColor: sex === s ? "var(--lime)" : "var(--line-2)",
@@ -181,20 +206,28 @@ export default function OnboardingPage() {
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <div style={{ flex: 1 }}>
-                  <label style={labelStyle}>Altura (cm)</label>
-                  <input type="number" value={heightCm} onChange={(e) => setHeightCm(e.target.value)}
-                    placeholder="178" style={inputStyle} />
+                  <label htmlFor="onboarding-height" style={labelStyle}>Altura (cm)</label>
+                  <input id="onboarding-height" type="number" value={heightCm} onChange={(e) => setHeightCm(e.target.value)}
+                    placeholder="178" min={100} max={250} style={inputStyle}
+                    aria-invalid={!!errors.heightCm} aria-describedby="onboarding-height-error" />
+                  {errors.heightCm && <div id="onboarding-height-error" style={fieldErrorStyle}>{errors.heightCm}</div>}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={labelStyle}>Peso actual (kg)</label>
-                  <input type="number" value={weightKg} onChange={(e) => setWeightKg(e.target.value)}
-                    placeholder="73.4" step={0.1} style={inputStyle} />
+                  <label htmlFor="onboarding-weight" style={labelStyle}>Peso actual (kg)</label>
+                  <input id="onboarding-weight" type="number" value={weightKg} onChange={(e) => setWeightKg(e.target.value)}
+                    placeholder="73.4" step={0.1} min={25} max={300} style={inputStyle}
+                    aria-invalid={!!errors.weightKg} aria-describedby="onboarding-weight-error" />
+                  {errors.weightKg && <div id="onboarding-weight-error" style={fieldErrorStyle}>{errors.weightKg}</div>}
                 </div>
               </div>
             </div>
             <div style={{ display: "flex", gap: 10, marginTop: 28 }}>
               <button onClick={() => setStep("welcome")} style={secondaryBtn}>← Atrás</button>
-              <button onClick={() => setStep("goal")} style={{ ...primaryBtn, flex: 1 }}>Siguiente →</button>
+              <button
+                onClick={() => setStep("goal")}
+                disabled={!personalComplete}
+                style={{ ...primaryBtn, flex: 1, opacity: personalComplete ? 1 : 0.5 }}
+              >Siguiente →</button>
             </div>
           </div>
         )}
@@ -205,7 +238,7 @@ export default function OnboardingPage() {
             <StepHeader current={2} total={3} title="Tu objetivo" />
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 24 }}>
               {GOAL_OPTIONS.map((g) => (
-                <button key={g.value} onClick={() => setGoalType(g.value)} style={{
+                <button key={g.value} onClick={() => setGoalType(g.value)} aria-pressed={goalType === g.value} style={{
                   ...cardOptionBtn,
                   borderColor: goalType === g.value ? "var(--lime)" : "var(--line-1)",
                   background: goalType === g.value ? "rgba(198,255,80,0.05)" : "var(--bg-1)",
@@ -220,8 +253,8 @@ export default function OnboardingPage() {
               ))}
               {(goalType === "lose" || goalType === "gain") && (
                 <div style={{ marginTop: 4 }}>
-                  <label style={labelStyle}>Peso objetivo (kg)</label>
-                  <input type="number" value={goalWeight} onChange={(e) => setGoalWeight(e.target.value)}
+                  <label htmlFor="onboarding-goal-weight" style={labelStyle}>Peso objetivo (kg)</label>
+                  <input id="onboarding-goal-weight" type="number" value={goalWeight} onChange={(e) => setGoalWeight(e.target.value)}
                     placeholder="70.0" step={0.1} style={inputStyle} />
                 </div>
               )}
@@ -239,7 +272,7 @@ export default function OnboardingPage() {
             <StepHeader current={3} total={3} title="Nivel de actividad" />
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 24 }}>
               {ACTIVITY_OPTIONS.map((a) => (
-                <button key={a.value} onClick={() => setActivityLevel(a.value)} style={{
+                <button key={a.value} onClick={() => setActivityLevel(a.value)} aria-pressed={activityLevel === a.value} style={{
                   ...cardOptionBtn,
                   borderColor: activityLevel === a.value ? "var(--lime)" : "var(--line-1)",
                   background: activityLevel === a.value ? "rgba(198,255,80,0.05)" : "var(--bg-1)",
@@ -265,6 +298,15 @@ export default function OnboardingPage() {
             {!canFinish && (
               <div style={{ marginTop: 12, fontSize: 11.5, color: "var(--text-3)", textAlign: "center", lineHeight: 1.5 }}>
                 Completá nombre, año de nacimiento, altura y peso para arrancar.
+              </div>
+            )}
+            {saveError && (
+              <div role="alert" style={{
+                marginTop: 12, padding: "10px 12px", borderRadius: 10,
+                background: "rgba(255,107,107,0.08)", border: "1px solid rgba(255,107,107,0.25)",
+                fontSize: 11.5, color: "var(--red)", textAlign: "center", lineHeight: 1.5,
+              }}>
+                {saveError}
               </div>
             )}
           </div>
@@ -311,6 +353,13 @@ const labelStyle: React.CSSProperties = {
   textTransform: "uppercase",
   fontFamily: "var(--font-mono)",
   marginBottom: 8,
+};
+
+const fieldErrorStyle: React.CSSProperties = {
+  marginTop: 6,
+  color: "var(--red)",
+  fontSize: 10.5,
+  lineHeight: 1.35,
 };
 
 const inputStyle: React.CSSProperties = {

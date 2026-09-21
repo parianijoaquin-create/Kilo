@@ -68,6 +68,8 @@ export function MealCard({ meal, onAdd }: MealCardProps) {
         </div>
 
         <button
+          type="button"
+          aria-label={`Agregar alimento a ${meal.name}`}
           onClick={(e) => { e.stopPropagation(); onAdd(); }}
           style={{
             width: 32,

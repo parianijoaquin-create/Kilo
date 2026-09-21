@@ -15,9 +15,11 @@ import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 import { SwipeToDelete } from "@/components/ui/SwipeToDelete";
 import { WaterGlasses } from "@/components/ui/WaterGlasses";
 import { EditPortionSheet } from "@/components/food/EditPortionSheet";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { haptic } from "@/lib/haptics";
 import { foodEmoji } from "@/lib/foodEmoji";
 import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
+import { shiftLocalDate, toLocalDate } from "@/lib/date";
 
 const STANDARD_MEALS = ["morning", "lunch", "snack", "dinner"] as const;
 
@@ -36,6 +38,14 @@ const MEAL_ICONS: Record<string, string> = {
 
 const DAY_LABELS = ["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sá"];
 
+function mealTypeForCurrentHour() {
+  const hour = new Date().getHours();
+  if (hour < 11) return "morning";
+  if (hour < 15) return "lunch";
+  if (hour < 19) return "snack";
+  return "dinner";
+}
+
 function buildDateStrip() {
   const now = new Date();
   return Array.from({ length: 7 }, (_, i) => {
@@ -44,7 +54,7 @@ function buildDateStrip() {
     return {
       d: DAY_LABELS[d.getDay()],
       n: d.getDate(),
-      iso: d.toLocaleDateString("en-CA"), // local, no UTC
+      iso: toLocalDate(d),
       today: i === 5,
       future: i > 5,
     };
@@ -234,12 +244,35 @@ export default function DiaryPage() {
   const today = useToday();
   const [selectedDate, setSelectedDate] = useState(today);
   const isToday = selectedDate === today;
-  const { meals, totals, addMealItem, updateMealItem, deleteMealItem } = useDiary(selectedDate);
+  const { meals, totals, loading: diaryLoading, error: diaryError, addMealItem, updateMealItem, deleteMealItem, copyMealsFromDate } = useDiary(selectedDate);
   const { remove: removeMealItem, isPending: isItemPending } = useUndoableDelete(deleteMealItem, { label: "Item eliminado" });
   const [editingItem, setEditingItem] = useState<DiaryItem | null>(null);
-  const { glasses: water, setWater } = useWater(selectedDate);
+  const [copying, setCopying] = useState(false);
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const { glasses: water, error: waterError, setWater } = useWater(selectedDate);
   const { profile } = useProfile();
-  const DATE_STRIP = useMemo(() => buildDateStrip(), [today]);
+  const DATE_STRIP = useMemo(() => buildDateStrip(), []);
+  const hasFood = meals.some((meal) => meal.meal_items.length > 0);
+
+  const selectDate = (date: string) => {
+    setSelectedDate(date);
+    setCopyMessage(null);
+  };
+
+  const copyPreviousDay = async () => {
+    setCopying(true);
+    setCopyMessage(null);
+    const { error, copiedItems } = await copyMealsFromDate(shiftLocalDate(selectedDate, -1));
+    setCopying(false);
+    if (error) {
+      setCopyMessage("No pudimos copiar el día anterior.");
+    } else if (copiedItems === 0) {
+      setCopyMessage("El día anterior no tiene alimentos registrados.");
+    } else {
+      haptic("success");
+      setCopyMessage(`Copiamos ${copiedItems} alimento${copiedItems === 1 ? "" : "s"}.`);
+    }
+  };
 
   const kcalGoal    = profile?.daily_target_kcal ?? 2000;
   const proteinGoal = profile?.protein_target_g  ?? 150;
@@ -296,7 +329,11 @@ export default function DiaryPage() {
             }}>
               Diario
             </h1>
-            <button style={{
+            <button
+              type="button"
+              onClick={() => openSheet(mealTypeForCurrentHour(), addFoodToMeal)}
+              aria-label="Buscar y agregar alimento"
+              style={{
               width: 38,
               height: 38,
               borderRadius: 12,
@@ -306,7 +343,8 @@ export default function DiaryPage() {
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
-            }}>
+              }}
+            >
               <IconSearch size={18} color="var(--text-2)" />
             </button>
           </div>
@@ -318,7 +356,7 @@ export default function DiaryPage() {
               return (
                 <button
                   key={day.iso}
-                  onClick={() => !day.future && setSelectedDate(day.iso)}
+                  onClick={() => !day.future && selectDate(day.iso)}
                   disabled={day.future}
                   className="kilo-pressable"
                   style={{
@@ -356,9 +394,32 @@ export default function DiaryPage() {
               color: "var(--text-3)", fontFamily: "var(--font-mono)",
             }}>
               Viendo {selectedDate} · <button
-                onClick={() => setSelectedDate(today)}
+                onClick={() => selectDate(today)}
                 style={{ background: "none", border: "none", color: "var(--lime)", cursor: "pointer", fontSize: 11, fontFamily: "var(--font-mono)" }}
               >Volver a hoy</button>
+            </div>
+          )}
+
+          {!diaryLoading && !hasFood && (
+            <button
+              type="button"
+              onClick={copyPreviousDay}
+              disabled={copying}
+              className="kilo-pressable"
+              style={{
+                width: "100%", marginTop: 10, padding: "10px 14px",
+                borderRadius: 12, border: "1px solid var(--line-2)",
+                background: "var(--bg-1)", color: "var(--text-2)",
+                fontSize: 12.5, fontWeight: 600,
+                cursor: copying ? "default" : "pointer", opacity: copying ? 0.65 : 1,
+              }}
+            >
+              {copying ? "Copiando…" : "Copiar alimentos del día anterior"}
+            </button>
+          )}
+          {copyMessage && (
+            <div role="status" aria-live="polite" style={{ marginTop: 8, textAlign: "center", color: "var(--text-3)", fontSize: 11.5 }}>
+              {copyMessage}
             </div>
           )}
 
@@ -446,6 +507,16 @@ export default function DiaryPage() {
             ))}
           </div>
         </div>
+
+        {(diaryError || waterError) && (
+          <div style={{ padding: "12px 20px 0" }}>
+            <ErrorBanner
+              title="No pudimos sincronizar el diario"
+              message="Los datos visibles pueden estar desactualizados."
+              onRetry={() => window.location.reload()}
+            />
+          </div>
+        )}
 
         {/* Meal sections */}
         <div style={{ padding: "8px 20px 0" }}>

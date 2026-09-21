@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useToday } from "@/hooks/useToday";
 import { useAuth } from "@/context/AuthContext";
+import { readCache, userCacheKey, writeCache, useIsoLayoutEffect } from "@/lib/localCache";
 import type { Habit, HabitLog, HabitLogStatus } from "@/types";
 
 export function useHabits() {
@@ -13,10 +14,28 @@ export function useHabits() {
   const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
   const today = useToday();
+  const cacheKey = userId ? userCacheKey(userId, "habits") : null;
+
+  const commitHabits = useCallback((updater: Habit[] | ((prev: Habit[]) => Habit[])) => {
+    setHabits((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (cacheKey) writeCache(cacheKey, next);
+      return next;
+    });
+  }, [cacheKey]);
+
+  useIsoLayoutEffect(() => {
+    if (!cacheKey) return;
+    const cached = readCache<Habit[]>(cacheKey);
+    if (cached) {
+      setHabits(cached);
+      setLoading(false);
+    }
+  }, [cacheKey]);
 
   useEffect(() => {
     if (authLoading) return;
-    if (!userId) { setLoading(false); return; }
+    if (!userId) return;
 
     let cancelled = false;
 
@@ -32,7 +51,7 @@ export function useHabits() {
         .order("created_at", { ascending: true });
 
       if (!cancelled) {
-        setHabits((data as unknown as Habit[]) ?? []);
+        if (!error) commitHabits((data as unknown as Habit[]) ?? []);
         setError(error?.message ?? null);
         setLoading(false);
       }
@@ -40,7 +59,7 @@ export function useHabits() {
 
     load();
     return () => { cancelled = true; };
-  }, [supabase, userId, authLoading]);
+  }, [supabase, userId, authLoading, commitHabits]);
 
   const toggleHabit = useCallback(async (habitId: string) => {
     if (!userId) return { error: "No autenticado" };
@@ -58,7 +77,7 @@ export function useHabits() {
         .eq("id", existingLog.id);
 
       if (!error) {
-        setHabits((prev) =>
+        commitHabits((prev) =>
           prev.map((h) =>
             h.id === habitId
               ? {
@@ -71,6 +90,7 @@ export function useHabits() {
           )
         );
       }
+      setError(error?.message ?? null);
       return { error: error?.message ?? null };
     } else {
       const { data: newLog, error } = await supabase
@@ -80,7 +100,7 @@ export function useHabits() {
         .single();
 
       if (!error && newLog) {
-        setHabits((prev) =>
+        commitHabits((prev) =>
           prev.map((h) =>
             h.id === habitId
               ? { ...h, habit_logs: [...(h.habit_logs ?? []), newLog as HabitLog] }
@@ -88,9 +108,10 @@ export function useHabits() {
           )
         );
       }
+      setError(error?.message ?? null);
       return { error: error?.message ?? null };
     }
-  }, [supabase, userId, habits, today]);
+  }, [supabase, userId, habits, today, commitHabits]);
 
   const createHabit = useCallback(async (habit: Partial<Habit>) => {
     if (!userId) return { error: "No autenticado" };
@@ -112,10 +133,11 @@ export function useHabits() {
       .single();
 
     if (!error && data) {
-      setHabits((prev) => [...prev, { ...(data as Habit), habit_logs: [] }]);
+      commitHabits((prev) => [...prev, { ...(data as Habit), habit_logs: [] }]);
     }
+    setError(error?.message ?? null);
     return { error: error?.message ?? null };
-  }, [supabase, userId]);
+  }, [supabase, userId, commitHabits]);
 
   const deleteHabit = useCallback(async (habitId: string) => {
     const { error } = await supabase
@@ -123,9 +145,10 @@ export function useHabits() {
       .update({ is_active: false })
       .eq("id", habitId);
 
-    if (!error) setHabits((prev) => prev.filter((h) => h.id !== habitId));
+    if (!error) commitHabits((prev) => prev.filter((h) => h.id !== habitId));
+    setError(error?.message ?? null);
     return { error: error?.message ?? null };
-  }, []);
+  }, [supabase, commitHabits]);
 
   const updateHabit = useCallback(async (
     habitId: string,
@@ -139,12 +162,13 @@ export function useHabits() {
       .single();
 
     if (!error && data) {
-      setHabits((prev) =>
+      commitHabits((prev) =>
         prev.map((h) => (h.id === habitId ? { ...h, ...(data as Habit) } : h))
       );
     }
+    setError(error?.message ?? null);
     return { error: error?.message ?? null };
-  }, []);
+  }, [supabase, commitHabits]);
 
-  return { habits, loading, error, toggleHabit, createHabit, deleteHabit, updateHabit };
+  return { habits, loading: authLoading || (!!userId && loading), error, toggleHabit, createHabit, deleteHabit, updateHabit };
 }

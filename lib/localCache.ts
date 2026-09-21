@@ -7,6 +7,11 @@ import { useEffect, useLayoutEffect } from "react";
 export const useIsoLayoutEffect =
   typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
+/** Clave aislada por usuario para no mostrar datos de otra cuenta en equipos compartidos. */
+export function userCacheKey(userId: string, resource: string): string {
+  return `kilo:${userId}:${resource}`;
+}
+
 /** Lee y parsea un valor cacheado. Devuelve null si no existe o está corrupto. */
 export function readCache<T>(key: string): T | null {
   if (typeof window === "undefined") return null;

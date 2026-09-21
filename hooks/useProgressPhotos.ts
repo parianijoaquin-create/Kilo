@@ -7,6 +7,7 @@ import { resizeImage } from "@/lib/imageResize";
 
 const BUCKET = "progress-photos";
 const SIGNED_URL_TTL = 60 * 60; // 1 h; alcanza para la sesión de visualización.
+const MAX_PHOTO_BYTES = 15 * 1024 * 1024;
 
 export interface ProgressPhoto {
   id: string;
@@ -34,7 +35,7 @@ export function useProgressPhotos() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!userId) { setLoading(false); return; }
+    if (!userId) return;
 
     let cancelled = false;
 
@@ -76,7 +77,13 @@ export function useProgressPhotos() {
     setError(null);
 
     try {
-      if (!userId) return { error: "No autenticado" };
+      const fail = (message: string) => {
+        setError(message);
+        return { error: message };
+      };
+      if (!userId) return fail("No autenticado");
+      if (!file.type.startsWith("image/")) return fail("Elegí un archivo de imagen válido");
+      if (file.size > MAX_PHOTO_BYTES) return fail("La imagen no puede superar los 15 MB");
 
       const blob = await resizeImage(file);
       const path = `${userId}/${crypto.randomUUID()}.jpg`;
@@ -84,7 +91,7 @@ export function useProgressPhotos() {
       const { error: upErr } = await supabase.storage
         .from(BUCKET)
         .upload(path, blob, { contentType: "image/jpeg", upsert: false });
-      if (upErr) return { error: upErr.message };
+      if (upErr) return fail(upErr.message);
 
       const { data: row, error: insErr } = await supabase
         .from("progress_photos")
@@ -101,7 +108,7 @@ export function useProgressPhotos() {
       if (insErr || !row) {
         // Rollback del storage si falló el insert, para no dejar huérfanos.
         await supabase.storage.from(BUCKET).remove([path]);
-        return { error: insErr?.message ?? "No se pudo guardar la foto" };
+        return fail(insErr?.message ?? "No se pudo guardar la foto");
       }
 
       const { data: signed } = await supabase.storage
@@ -114,6 +121,10 @@ export function useProgressPhotos() {
       };
       setPhotos((prev) => [newPhoto, ...prev]);
       return { error: null };
+    } catch {
+      const message = "No se pudo procesar o subir la foto";
+      setError(message);
+      return { error: message };
     } finally {
       uploadingRef.current = false;
       setUploading(false);
@@ -128,12 +139,15 @@ export function useProgressPhotos() {
       .from("progress_photos")
       .delete()
       .eq("id", id);
-    if (delErr) return { error: delErr.message };
+    if (delErr) {
+      setError(delErr.message);
+      return { error: delErr.message };
+    }
 
     await supabase.storage.from(BUCKET).remove([target.storage_path]);
     setPhotos((prev) => prev.filter((p) => p.id !== id));
     return { error: null };
   }, [supabase, photos]);
 
-  return { photos, loading, uploading, error, addPhoto, deletePhoto };
+  return { photos, loading: authLoading || (!!userId && loading), uploading, error, addPhoto, deletePhoto };
 }

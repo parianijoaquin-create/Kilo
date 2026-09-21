@@ -23,19 +23,34 @@ export function useAuth() {
   }, [supabase, router]);
 
   const signUp = useCallback(async (email: string, password: string, displayName?: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { display_name: displayName ?? email.split("@")[0] } },
     });
-    if (!error) router.push("/onboarding");
-    return { error };
-  }, [supabase, router]);
+    return {
+      error,
+      needsEmailConfirmation: !error && !data.session,
+    };
+  }, [supabase]);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     router.push("/login");
   }, [supabase, router]);
 
-  return { userId, loading, signIn, signUp, signOut };
+  const requestPasswordReset = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    return { error };
+  }, [supabase]);
+
+  const updatePassword = useCallback(async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (!error) await supabase.auth.signOut();
+    return { error };
+  }, [supabase]);
+
+  return { userId, loading, signIn, signUp, signOut, requestPasswordReset, updatePassword };
 }

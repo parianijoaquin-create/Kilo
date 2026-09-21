@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useToday } from "@/hooks/useToday";
 import { useAuth } from "@/context/AuthContext";
 import { localDayRangeUtc, toLocalDate } from "@/lib/date";
+import { readCache, userCacheKey, writeCache, useIsoLayoutEffect } from "@/lib/localCache";
 import {
   computeWeeklyInsights, weightTrendKg,
   type DayNutrition, type WeeklyInsights,
@@ -15,6 +16,11 @@ type MealRow = {
   meal_items: Array<{ calories_kcal: number | null; protein_g: number | null }> | null;
 };
 
+interface CachedWeeklyInsights {
+  insights: WeeklyInsights;
+  weightDelta: number | null;
+}
+
 /** Insights de los últimos 7 días (hoy incluido) para una meta de kcal dada. */
 export function useWeeklyInsights(kcalGoal: number) {
   const today = useToday();
@@ -24,10 +30,21 @@ export function useWeeklyInsights(kcalGoal: number) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
+  const cacheKey = userId ? userCacheKey(userId, `weekly:${today}:${kcalGoal}`) : null;
+
+  useIsoLayoutEffect(() => {
+    if (!cacheKey) return;
+    const cached = readCache<CachedWeeklyInsights>(cacheKey);
+    if (cached) {
+      setInsights(cached.insights);
+      setWeightDelta(cached.weightDelta);
+      setLoading(false);
+    }
+  }, [cacheKey]);
 
   useEffect(() => {
     if (authLoading) return;
-    if (!userId) { setLoading(false); return; }
+    if (!userId) return;
 
     let cancelled = false;
 
@@ -77,14 +94,17 @@ export function useWeeklyInsights(kcalGoal: number) {
 
       if (cancelled) return;
       setError(null);
-      setInsights(computeWeeklyInsights(perDay, kcalGoal));
-      setWeightDelta(weightTrendKg((weights ?? []) as Array<{ weight_kg: number; logged_at: string }>, new Date(), 7));
+      const nextInsights = computeWeeklyInsights(perDay, kcalGoal);
+      const nextWeightDelta = weightTrendKg((weights ?? []) as Array<{ weight_kg: number; logged_at: string }>, new Date(), 7);
+      setInsights(nextInsights);
+      setWeightDelta(nextWeightDelta);
+      if (cacheKey) writeCache(cacheKey, { insights: nextInsights, weightDelta: nextWeightDelta });
       setLoading(false);
     }
 
     load();
     return () => { cancelled = true; };
-  }, [supabase, userId, authLoading, today, kcalGoal]);
+  }, [supabase, userId, authLoading, today, kcalGoal, cacheKey]);
 
-  return { insights, weightDelta, loading, error };
+  return { insights, weightDelta, loading: authLoading || (!!userId && loading), error };
 }

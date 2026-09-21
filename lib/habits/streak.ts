@@ -1,6 +1,8 @@
+import { toLocalDate } from "@/lib/date";
+
 /** Fecha local YYYY-MM-DD (no UTC), para no adelantar el día de noche en zonas UTC-. */
 export function ymdLocal(d: Date): string {
-  return d.toLocaleDateString("en-CA");
+  return toLocalDate(d);
 }
 
 /**

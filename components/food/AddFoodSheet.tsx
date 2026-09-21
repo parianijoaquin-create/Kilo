@@ -6,8 +6,6 @@ import { useSheet, type FoodSearchResult } from "@/context/SheetContext";
 import { useAuth } from "@/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
 import { IconSearch, IconCamera, IconBarcode, IconClose } from "@/components/icons";
-import { BrowserMultiFormatReader } from "@zxing/browser";
-import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 import type { IScannerControls } from "@zxing/browser";
 import { searchFoods, type RankableFood } from "@/lib/foodSearch";
 import { suggestFoods, mealSuggestionLabel } from "@/lib/mealSuggestions";
@@ -40,6 +38,15 @@ export function AddFoodSheet() {
   const [scannerStatus, setScannerStatus] = useState<ScannerStatus>("idle");
   const [scannerMessage, setScannerMessage] = useState<string | null>(null);
   const [manualBarcode, setManualBarcode] = useState("");
+  const [pendingFood, setPendingFood] = useState<FoodSearchResult | null>(null);
+  const [portionGrams, setPortionGrams] = useState<string>("");
+  const [aiConfidence, setAiConfidence] = useState<number | null>(null);
+  const [portionSource, setPortionSource] = useState<"default" | "history">("default");
+  const [reviewComponents, setReviewComponents] = useState<ReviewComponent[] | null>(null);
+  const [reviewDishName, setReviewDishName] = useState<string>("");
+  const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
+  const [pendingPhoto, setPendingPhoto] = useState<{ file: File; url: string } | null>(null);
+  const [photoHint, setPhotoHint] = useState<string>("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
@@ -50,6 +57,7 @@ export function AddFoodSheet() {
 
   const fetchSeqRef = useRef(0);
   const catalogLoadingRef = useRef<Promise<void> | null>(null);
+  const portionPickerSeqRef = useRef(0);
 
   // Carga el catálogo completo una vez (paginado, por si supera el cap de 1000).
   const ensureCatalog = useCallback(async () => {
@@ -153,7 +161,7 @@ export function AddFoodSheet() {
     setSuggestions([]);
     setFoods([]);
     setLoading(false);
-  }, [ensureCatalog, mealId, userId]);
+  }, [ensureCatalog, mealId, supabase, userId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -168,7 +176,8 @@ export function AddFoodSheet() {
 
   // Reset state when sheet opens
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+    const frame = window.requestAnimationFrame(() => {
       setQuery("");
       setError(null);
       setAdding(false);
@@ -187,7 +196,8 @@ export function AddFoodSheet() {
         if (prev) URL.revokeObjectURL(prev.url);
         return null;
       });
-    }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [isOpen]);
 
   const stopScanner = useCallback(() => {
@@ -269,21 +279,28 @@ export function AddFoodSheet() {
     if (!videoEl) return;
 
     let cancelled = false;
-    const hints = new Map<DecodeHintType, unknown>();
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-      BarcodeFormat.EAN_13,
-      BarcodeFormat.EAN_8,
-      BarcodeFormat.UPC_A,
-      BarcodeFormat.UPC_E,
-      BarcodeFormat.CODE_128,
-      BarcodeFormat.ITF,
-    ]);
-    hints.set(DecodeHintType.TRY_HARDER, true);
-
-    const reader = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 200 });
-
     (async () => {
       try {
+        // ZXing pesa bastante y sólo hace falta al abrir la cámara. Mantenerlo
+        // fuera del bundle inicial acelera todas las pantallas normales.
+        const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] = await Promise.all([
+          import("@zxing/browser"),
+          import("@zxing/library"),
+        ]);
+        if (cancelled) return;
+
+        const hints = new Map<import("@zxing/library").DecodeHintType, unknown>();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.UPC_E,
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.ITF,
+        ]);
+        hints.set(DecodeHintType.TRY_HARDER, true);
+
+        const reader = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 200 });
         const controls = await reader.decodeFromConstraints(
           {
             video: {
@@ -330,25 +347,8 @@ export function AddFoodSheet() {
     };
   }, [isOpen, scannerMode, stopScanner]);
 
-  const [pendingFood, setPendingFood] = useState<FoodSearchResult | null>(null);
-  const [portionGrams, setPortionGrams] = useState<string>("");
-  const [aiConfidence, setAiConfidence] = useState<number | null>(null);
   // "history" cuando prellenamos con la porción que el usuario suele usar para
   // este alimento (más confiable que cualquier estimación de la IA).
-  const [portionSource, setPortionSource] = useState<"default" | "history">("default");
-  const portionPickerSeqRef = useRef(0);
-
-  // Revisión multi-item del análisis por foto: el plato separado en componentes.
-  const [reviewComponents, setReviewComponents] = useState<ReviewComponent[] | null>(null);
-  const [reviewDishName, setReviewDishName] = useState<string>("");
-  // Índice del componente que se está reemplazando vía el buscador (o null).
-  const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
-
-  // Foto tomada esperando confirmación: mostramos preview + campo opcional para
-  // que el usuario aclare qué es (ej: "milanesas de cerdo") antes de analizar.
-  const [pendingPhoto, setPendingPhoto] = useState<{ file: File; url: string } | null>(null);
-  const [photoHint, setPhotoHint] = useState<string>("");
-
   function openPortionPicker(food: FoodSearchResult) {
     const seq = ++portionPickerSeqRef.current;
     setPendingFood(food);
@@ -494,7 +494,7 @@ export function AddFoodSheet() {
     activeTab === "Frecuentes" && query.length < 2 && suggestions.length > 0;
 
   return (
-    <Sheet open={isOpen} onClose={closeSheet} height="82%">
+    <Sheet open={isOpen} onClose={closeSheet} height="82%" ariaLabel="Agregar alimento">
       {pendingPhoto && !analyzingPhoto && (
         <PhotoConfirmPanel
           url={pendingPhoto.url}
@@ -563,6 +563,7 @@ export function AddFoodSheet() {
         <button
           className="kilo-pressable"
           onClick={closeSheet}
+          aria-label="Cerrar panel de alimentos"
           style={{
             width: 32,
             height: 32,
@@ -613,6 +614,7 @@ export function AddFoodSheet() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar alimento, marca…"
+            aria-label="Buscar alimento o marca"
             style={{
               flex: 1,
               background: "none",
@@ -626,6 +628,7 @@ export function AddFoodSheet() {
           {query && (
             <button
               onClick={() => setQuery("")}
+              aria-label="Limpiar búsqueda"
               style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}
             >
               <IconClose size={14} color="var(--text-3)" />
@@ -716,7 +719,7 @@ export function AddFoodSheet() {
       )}
 
       {/* Tabs */}
-      <div style={{
+      <div role="tablist" aria-label="Listas de alimentos" style={{
         padding: "12px 20px 0",
         display: "flex",
         gap: 4,
@@ -728,6 +731,8 @@ export function AddFoodSheet() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
+            role="tab"
+            aria-selected={activeTab === tab}
             style={{
               padding: "8px 12px",
               background: "none",

@@ -48,6 +48,7 @@ export function BottomNav() {
           <Link
             key={id}
             href={href}
+            aria-current={isActive ? "page" : undefined}
             style={{
               background: "none",
               border: "none",

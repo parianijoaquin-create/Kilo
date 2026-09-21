@@ -14,7 +14,9 @@ import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 import { SwipeToDelete } from "@/components/ui/SwipeToDelete";
 import { CheckToggle } from "@/components/ui/CheckToggle";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { currentStreak } from "@/lib/habits/streak";
+import { toLocalDate } from "@/lib/date";
 import type { Habit, HabitColor } from "@/types";
 
 const DAYS = ["L", "M", "M", "J", "V", "S", "D"];
@@ -45,8 +47,7 @@ function weekIndex(d: Date) {
 }
 
 function ymd(d: Date) {
-  // Fecha local (no UTC) para no adelantar el día a la noche en zonas UTC-.
-  return d.toLocaleDateString("en-CA");
+  return toLocalDate(d);
 }
 
 function buildWeekDates() {
@@ -331,9 +332,10 @@ function HabitForm({ mode, initial, onSubmit, onCancel }: {
 }
 
 export default function HabitsPage() {
-  const { habits, toggleHabit, createHabit, deleteHabit, updateHabit, loading } = useHabits();
+  const { habits, toggleHabit, createHabit, deleteHabit, updateHabit, loading, error } = useHabits();
   const { remove: removeHabit, isPending } = useUndoableDelete(deleteHabit, { label: "Hábito eliminado" });
   const [creating, setCreating] = useState(false);
+  const [creatingInitial, setCreatingInitial] = useState<HabitFormValues | undefined>();
   const [editingId, setEditingId] = useState<string | null>(null);
   const week = buildWeekDates();
   const views = habits
@@ -373,6 +375,16 @@ export default function HabitsPage() {
                 : <>Hoy: <span style={{ color: "var(--lime)" }}>{doneTodayCount} de {totalToday}</span></>}
           </div>
         </div>
+
+        {error && (
+          <div style={{ padding: "12px 20px 0" }}>
+            <ErrorBanner
+              title="No pudimos sincronizar tus hábitos"
+              message="Puede que estés viendo información desactualizada."
+              onRetry={() => window.location.reload()}
+            />
+          </div>
+        )}
 
         {/* Weekly heatmap */}
         {views.length > 0 && (
@@ -475,27 +487,34 @@ export default function HabitsPage() {
           {creating ? (
             <HabitForm
               mode="create"
+              initial={creatingInitial}
               onSubmit={async (data) => {
                 const res = await createHabit({
                   ...data,
                   code: data.title.toLowerCase().replace(/\s+/g, "_").slice(0, 32),
                   frequency: "daily",
                 });
-                if (!res.error) setCreating(false);
+                if (!res.error) {
+                  setCreating(false);
+                  setCreatingInitial(undefined);
+                }
                 return res;
               }}
-              onCancel={() => setCreating(false)}
+              onCancel={() => {
+                setCreating(false);
+                setCreatingInitial(undefined);
+              }}
             />
           ) : !loading && views.length === 0 ? (
             <EmptyState
               emoji="🌱"
               title="Empezá tu primer hábito"
               subtitle="Elegí algo chico y constante: tomar agua, leer 10 minutos, estirar. Los hábitos suman racha día a día."
-              action={{ label: "Crear hábito", onClick: () => setCreating(true) }}
+              action={{ label: "Crear hábito", onClick: () => { setCreatingInitial(undefined); setCreating(true); } }}
             />
           ) : (
             <button
-              onClick={() => setCreating(true)}
+              onClick={() => { setCreatingInitial(undefined); setCreating(true); }}
               className="kilo-pressable"
               style={{
                 background: "transparent", border: "1.5px dashed var(--line-2)",
@@ -526,21 +545,29 @@ export default function HabitsPage() {
         <SectionHead title="Sugerencias" />
         <div style={{ padding: "0 20px", display: "flex", gap: 8, overflowX: "auto" }}>
           {[
-            { name: "Meditación", sub: "5 min",       Icon: IconLeaf,     color: "#5BD9A3" },
-            { name: "Estirar",    sub: "10 min",       Icon: IconActivity, color: "var(--orange)" },
-            { name: "Caminar",    sub: "8.000 pasos",  Icon: IconRunner,   color: "var(--blue)" },
+            { name: "Meditación", value: 5, unit: "min", Icon: IconLeaf, color: "#5BD9A3" },
+            { name: "Estirar", value: 10, unit: "min", Icon: IconActivity, color: "var(--orange)" },
+            { name: "Caminar", value: 8000, unit: "pasos", Icon: IconRunner, color: "var(--blue)" },
           ].map((s, i) => (
-            <div key={i} className="kilo-pressable" style={{
+            <button
+              key={i}
+              type="button"
+              onClick={() => {
+                setCreatingInitial({ title: s.name, target_value: s.value, target_unit: s.unit });
+                setCreating(true);
+              }}
+              className="kilo-pressable"
+              style={{
               flexShrink: 0, width: 140,
               background: "var(--bg-1)", border: "1px solid var(--line-1)",
-              borderRadius: 16, padding: 14, cursor: "pointer",
+              borderRadius: 16, padding: 14, cursor: "pointer", textAlign: "left",
             }}>
               <s.Icon size={20} color={s.color} />
               <div style={{ marginTop: 16, fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 500, letterSpacing: "-0.015em", color: "var(--text-1)" }}>
                 {s.name}
               </div>
-              <div style={{ fontSize: 10.5, color: "var(--text-3)", marginTop: 1 }}>{s.sub}</div>
-            </div>
+              <div style={{ fontSize: 10.5, color: "var(--text-3)", marginTop: 1 }}>{s.value.toLocaleString("es-AR")} {s.unit}</div>
+            </button>
           ))}
         </div>
 

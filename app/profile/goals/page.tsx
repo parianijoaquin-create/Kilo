@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { Screen } from "@/components/layout/Screen";
 import { SectionHead } from "@/components/ui/SectionHead";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import { IconChevronLeft, IconScale, IconTarget, IconDroplet } from "@/components/icons";
 import { useProfile } from "@/hooks/useProfile";
 import { useWeightLog } from "@/hooks/useWeightLog";
@@ -72,8 +73,8 @@ function stepBtn(disabled: boolean): React.CSSProperties {
 
 export default function GoalsPage() {
   const router = useRouter();
-  const { profile, updateProfile, loading } = useProfile();
-  const { latestWeight, logWeight, saving: savingWeight } = useWeightLog();
+  const { profile, updateProfile, loading, error: profileError } = useProfile();
+  const { latestWeight, logWeight, saving: savingWeight, error: weightError } = useWeightLog();
   const { showToast } = useToast();
 
   const currentWeight = latestWeight ?? profile?.current_weight_kg ?? null;
@@ -199,6 +200,16 @@ export default function GoalsPage() {
             Objetivos y macros
           </h1>
         </div>
+
+        {(profileError || weightError) && (
+          <div style={{ padding: "12px 20px 0" }}>
+            <ErrorBanner
+              title="No pudimos sincronizar tus objetivos"
+              message="Puede que estés viendo información desactualizada."
+              onRetry={() => window.location.reload()}
+            />
+          </div>
+        )}
 
         {loading ? (
           <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--text-3)", fontSize: 13 }}>Cargando…</div>

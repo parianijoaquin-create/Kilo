@@ -5,6 +5,7 @@ import { Sheet } from "@/components/ui/Sheet";
 import { IconClose } from "@/components/icons";
 import { haptic } from "@/lib/haptics";
 import { per100FromItem, scaleFromPer100 } from "@/lib/nutrition/scaling";
+import { portionChips } from "@/lib/portions";
 import type { DiaryItem } from "@/hooks/useDiary";
 
 const PRESETS = [50, 100, 150, 200, 250];
@@ -22,7 +23,9 @@ export function EditPortionSheet({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (item) setGrams(String(item.grams ?? 100));
+    if (!item) return;
+    const frame = window.requestAnimationFrame(() => setGrams(String(item.grams ?? 100)));
+    return () => window.cancelAnimationFrame(frame);
   }, [item]);
 
   const basis = useMemo(() => (item ? per100FromItem(item) : null), [item]);
@@ -30,6 +33,9 @@ export function EditPortionSheet({
   const scaled = basis ? scaleFromPer100(basis, g) : null;
   const original = item?.grams ?? 0;
   const changed = g > 0 && g !== original;
+  const householdPortions = item
+    ? portionChips(item.foods?.default_portion_name, item.foods?.default_portion_g)
+    : null;
 
   async function handleSave() {
     if (!item || saving || !changed || g <= 0) return;
@@ -43,7 +49,7 @@ export function EditPortionSheet({
   }
 
   return (
-    <Sheet open={item != null} onClose={onClose} height="auto">
+    <Sheet open={item != null} onClose={onClose} height="auto" ariaLabel="Editar porción">
       {item && scaled && (
         <div style={{ padding: "8px 20px 24px", display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -54,7 +60,9 @@ export function EditPortionSheet({
               Editar porción
             </div>
             <button
+              type="button"
               onClick={onClose}
+              aria-label="Cerrar edición de porción"
               style={{
                 width: 32, height: 32, borderRadius: 10,
                 background: "var(--bg-2)", border: "none", cursor: "pointer",
@@ -71,13 +79,21 @@ export function EditPortionSheet({
           <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2, fontFamily: "var(--font-mono)" }}>
             Antes: {original}g
           </div>
+          {item.foods?.default_portion_name && item.foods.default_portion_g && (
+            <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 3, fontFamily: "var(--font-mono)" }}>
+              Referencia: {item.foods.default_portion_name} ({item.foods.default_portion_g}g)
+            </div>
+          )}
 
           <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10 }}>
             <button
+              type="button"
               onClick={() => setGrams(String(Math.max(0, g - 10)))}
+              aria-label="Restar 10 gramos"
               style={stepBtn}
             >−</button>
             <input
+              aria-label="Cantidad en gramos"
               value={grams}
               onChange={(e) => setGrams(e.target.value.replace(/[^\d.]/g, ""))}
               inputMode="decimal"
@@ -91,16 +107,45 @@ export function EditPortionSheet({
               }}
             />
             <button
+              type="button"
               onClick={() => setGrams(String(g + 10))}
+              aria-label="Sumar 10 gramos"
               style={stepBtn}
             >+</button>
             <span style={{ fontSize: 13, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>g</span>
           </div>
 
+          {householdPortions && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-mono)", letterSpacing: "0.04em", marginBottom: 6 }}>
+                {householdPortions.unitLabel.toUpperCase()}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {householdPortions.chips.map((chip) => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={() => setGrams(String(chip.grams))}
+                    style={{
+                      padding: "6px 12px", borderRadius: 8,
+                      background: g === chip.grams ? "var(--lime)" : "var(--bg-2)",
+                      border: "1px solid var(--line-2)",
+                      color: g === chip.grams ? "#0a0d15" : "var(--text-2)",
+                      fontSize: 11.5, fontFamily: "var(--font-mono)", cursor: "pointer", fontWeight: 600,
+                    }}
+                  >
+                    {chip.label} <span style={{ opacity: 0.6, fontSize: 10 }}>{chip.grams}g</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
             {PRESETS.map((preset) => (
               <button
                 key={preset}
+                type="button"
                 onClick={() => setGrams(String(preset))}
                 style={{
                   padding: "6px 12px", borderRadius: 8,
@@ -140,12 +185,13 @@ export function EditPortionSheet({
           </div>
 
           <div style={{ marginTop: 18, display: "flex", gap: 10 }}>
-            <button onClick={onClose} style={{
+            <button type="button" onClick={onClose} style={{
               flex: 1, height: 48, borderRadius: 14,
               background: "var(--bg-2)", border: "1px solid var(--line-2)",
               color: "var(--text-2)", fontSize: 13.5, fontWeight: 500, cursor: "pointer",
             }}>Cancelar</button>
             <button
+              type="button"
               onClick={handleSave}
               disabled={saving || !changed || g <= 0}
               style={{

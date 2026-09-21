@@ -29,11 +29,7 @@ export function Ring({
   const [animPct, setAnimPct] = useState(animate ? 0 : targetPct);
 
   useEffect(() => {
-    if (!animate) {
-      setAnimPct(targetPct);
-      return;
-    }
-    const t = setTimeout(() => setAnimPct(targetPct), 100);
+    const t = window.setTimeout(() => setAnimPct(targetPct), animate ? 100 : 0);
     return () => clearTimeout(t);
   }, [targetPct, animate]);
 

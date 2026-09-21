@@ -4,7 +4,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * Rate limit persistente por usuario+acción usando Postgres (serverless-safe).
  * Devuelve true si la request está permitida, false si superó el límite.
  *
- * Requiere la función `consume_rate_limit` (ver sql/migrations_add_rate_limits.sql).
+ * Debe recibir un cliente service_role creado exclusivamente en el servidor.
+ * La función SQL no está expuesta a clientes autenticados, para impedir que un
+ * usuario consuma el cupo global o el contador de otra persona.
+ * Requiere `consume_rate_limit` (ver sql/migrations_add_rate_limits.sql).
  * Si el RPC falla por algún motivo, dejamos pasar (fail-open) para no romper
  * la app por culpa del limitador.
  */

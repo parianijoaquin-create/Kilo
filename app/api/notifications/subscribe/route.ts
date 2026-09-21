@@ -6,6 +6,16 @@ interface SubscribePayload {
   keys: { p256dh: string; auth: string };
 }
 
+function validSubscription(payload: SubscribePayload) {
+  if (!payload?.endpoint || !payload.keys?.p256dh || !payload.keys?.auth) return false;
+  if (payload.endpoint.length > 2048 || payload.keys.p256dh.length > 512 || payload.keys.auth.length > 256) return false;
+  try {
+    return new URL(payload.endpoint).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -18,11 +28,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
 
-  if (!payload?.endpoint || !payload.keys?.p256dh || !payload.keys?.auth) {
+  if (!validSubscription(payload)) {
     return NextResponse.json({ error: "Subscription incompleta" }, { status: 400 });
   }
 
-  const userAgent = request.headers.get("user-agent") ?? null;
+  const userAgent = request.headers.get("user-agent")?.slice(0, 512) ?? null;
 
   const { error } = await supabase
     .from("push_subscriptions")
@@ -47,8 +57,16 @@ export async function DELETE(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const endpoint = request.nextUrl.searchParams.get("endpoint");
-  if (!endpoint) return NextResponse.json({ error: "endpoint requerido" }, { status: 400 });
+  let endpoint: string | null = null;
+  try {
+    const payload = (await request.json()) as { endpoint?: unknown };
+    if (typeof payload.endpoint === "string") endpoint = payload.endpoint;
+  } catch {
+    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+  }
+  if (!endpoint || endpoint.length > 2048) {
+    return NextResponse.json({ error: "endpoint requerido" }, { status: 400 });
+  }
 
   const { error } = await supabase
     .from("push_subscriptions")

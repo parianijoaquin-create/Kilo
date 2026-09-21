@@ -1,6 +1,13 @@
 # Auditoría técnica — Kilo
 
-_Fecha: 2026-07-27 · Alcance: backend (Supabase), frontend, UX y seguridad._
+_Fecha original: 2026-07-27 · Actualización: 2026-09-20 · Alcance: backend (Supabase), frontend, UX y seguridad._
+
+> **Estado actual.** Los hallazgos prioritarios y la mayoría de los secundarios ya fueron corregidos en el
+> código: autenticación compartida, fechas locales, errores visibles, caché por usuario, recuperación de
+> contraseña, PWA segura, accesibilidad, carga diferida del buscador/scanner, copiado de comidas y manejo de
+> fallos optimistas. La compilación, lint, 65 pruebas unitarias y las pruebas públicas E2E pasan. Quedan dos
+> verificaciones externas. La migración `sql/migrations_harden_security.sql` fue aplicada y verificada en
+> Supabase el 2026-09-21. Sólo queda ejecutar la batería autenticada con una cuenta que pertenezca al proyecto conectado.
 
 > **Corrección de stack.** El prompt asumía **Vite + React + shadcn/ui**. El proyecto real es
 > **Next.js 16 (App Router) + React 19 + Supabase SSR + Gemini (`@google/genai`) + web-push**, con una
@@ -10,8 +17,8 @@ _Fecha: 2026-07-27 · Alcance: backend (Supabase), frontend, UX y seguridad._
 
 ## Resumen ejecutivo
 
-La base está **sólida y por encima del promedio** para un proyecto en esta etapa: RLS activo y bien
-restringido en todas las tablas, secrets fuera del repo, rate limiting real en las rutas de IA/red, y un
+La base está **sólida y por encima del promedio** para un proyecto en esta etapa: las políticas RLS están
+definidas en el repositorio (su endurecimiento final aún debe aplicarse en producción), los secrets están fuera del repo, hay rate limiting real en las rutas de IA/red, y un
 patrón de fetching bien pensado (`useAuth` compartido + caché local). **No encontré hallazgos críticos**
 (agujeros de seguridad ni cosas que rompan datos de forma grave). Lo que hay para mejorar es sobre todo
 **consistencia** (mezclaste dos patrones de auth) y **escalabilidad de un par de piezas del frontend**.
@@ -109,7 +116,7 @@ ceros sin avisar. En una app de uso diario eso se lee como "se borraron mis dato
 
 ## Lo que está bien (para no romperlo)
 
-- **RLS completo y correcto:** todas las tablas de usuario con políticas `= auth.uid()`; `meal_items` valida
+- **RLS definido y endurecimiento preparado:** las tablas de usuario tienen políticas `= auth.uid()`; `meal_items` valida
   ownership vía join a `meals`; catálogo (`foods`, `barcode_products`) con lectura pública intencional; `audit`
   con RLS activo y sin políticas de cliente (solo `service_role`); Storage de fotos de progreso restringido por
   carpeta `{user_id}/`. Bucket privado con URLs firmadas.
@@ -123,4 +130,5 @@ ceros sin avisar. En una app de uso diario eso se lee como "se borraron mis dato
 ---
 
 _Sin cambios aplicados — esto es sólo el diagnóstico. Decime por cuál arrancamos y lo implemento (sugerencia:
-#1 auth y #2 timezone primero, son de bajo riesgo y alto impacto)._
+_Los cambios locales y la migración de seguridad de Supabase están aplicados y verificados. Pendiente únicamente:
+repetir la auditoría autenticada contra la instancia correcta._

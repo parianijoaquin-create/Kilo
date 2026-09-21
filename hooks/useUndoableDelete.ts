@@ -37,9 +37,20 @@ export function useUndoableDelete(
       setPending((prev) => new Set(prev).add(id));
 
       const timer = setTimeout(async () => {
-        await commit(id);
-        timers.current.delete(id);
-        drop(id);
+        try {
+          const result = await commit(id);
+          const error = result && typeof result === "object" && "error" in result
+            ? (result as { error?: unknown }).error
+            : null;
+          if (error) {
+            showToast({ message: "No se pudo eliminar. Intentá nuevamente." });
+          }
+        } catch {
+          showToast({ message: "No se pudo eliminar. Intentá nuevamente." });
+        } finally {
+          timers.current.delete(id);
+          drop(id);
+        }
       }, delay);
       timers.current.set(id, timer);
 

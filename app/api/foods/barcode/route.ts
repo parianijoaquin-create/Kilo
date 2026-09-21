@@ -89,7 +89,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
-  if (!(await consumeRateLimit(userClient, user.id, "food_barcode", RATE_LIMIT_MAX))) {
+  const supabase = adminClient();
+  if (!(await consumeRateLimit(supabase, user.id, "food_barcode", RATE_LIMIT_MAX))) {
     return NextResponse.json(
       { error: "Demasiados escaneos seguidos. Esperá un momento." },
       { status: 429 }
@@ -155,8 +156,6 @@ export async function GET(request: NextRequest) {
   const servingGrams = gramsFromServing(product.serving_size);
   const defaultPortionG = servingGrams ?? 100;
   const brand = product.brands?.split(",")[0]?.trim() || null;
-
-  const supabase = adminClient();
 
   const { data: source, error: sourceError } = await supabase
     .from("food_sources")

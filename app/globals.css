@@ -184,3 +184,10 @@ input {
     animation: none;
   }
 }
+
+/* Foco visible y consistente para navegación con teclado. El !important
+   compensa componentes antiguos que todavía declaran outline inline. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--lime) !important;
+  outline-offset: 3px;
+}

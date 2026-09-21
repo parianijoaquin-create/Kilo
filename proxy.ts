@@ -1,8 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_ROUTES = ["/login", "/register"];
-const AUTH_ACCESSIBLE_ROUTES = ["/onboarding"];
+const AUTH_ENTRY_ROUTES = ["/login", "/register"];
+const PUBLIC_ROUTES = [...AUTH_ENTRY_ROUTES, "/reset-password", "/offline"];
 
 export default async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -33,16 +33,17 @@ export default async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
-  const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
-  const isAuthAccessible = AUTH_ACCESSIBLE_ROUTES.some((r) => pathname.startsWith(r));
+  const matchesRoute = (route: string) => pathname === route || pathname.startsWith(`${route}/`);
+  const isPublic = PUBLIC_ROUTES.some(matchesRoute);
+  const isAuthEntry = AUTH_ENTRY_ROUTES.some(matchesRoute);
 
-  if (!user && !isPublic && !isAuthAccessible) {
+  if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  if (user && isPublic) {
+  if (user && isAuthEntry) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);

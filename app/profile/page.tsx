@@ -15,6 +15,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useWeightLog } from "@/hooks/useWeightLog";
 import { WeightSpark } from "@/components/dashboard/WeightSpark";
 import { ProgressPhotos } from "@/components/profile/ProgressPhotos";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
 
 const SETTINGS_BASE = [
   { Icon: IconTarget,   label: "Objetivos y macros" },
@@ -34,8 +35,8 @@ function ageFromBirthDate(birthDate?: string): number | null {
 export default function ProfilePage() {
   const router = useRouter();
   const { signOut } = useAuth();
-  const { profile } = useProfile();
-  const { latestWeight, logWeight, saving, sparkData, history } = useWeightLog();
+  const { profile, error: profileError } = useProfile();
+  const { latestWeight, logWeight, saving, sparkData, history, error: weightError } = useWeightLog();
 
   const displayName = profile?.display_name ?? "…";
   const displayWeight = latestWeight ?? profile?.current_weight_kg;
@@ -117,6 +118,16 @@ export default function ProfilePage() {
           </h1>
         </div>
 
+        {(profileError || weightError) && (
+          <div style={{ padding: "12px 20px 0" }}>
+            <ErrorBanner
+              title="No pudimos sincronizar tu perfil"
+              message="Puede que estés viendo información desactualizada."
+              onRetry={() => window.location.reload()}
+            />
+          </div>
+        )}
+
         {/* User card */}
         <div style={{ padding: "20px 20px 0" }}>
           <div style={{
@@ -159,6 +170,15 @@ export default function ProfilePage() {
           {/* ── Peso actual: clickeable para registrar nuevo peso ── */}
           <div
             onClick={!editingWeight ? openEdit : undefined}
+            onKeyDown={!editingWeight ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openEdit();
+              }
+            } : undefined}
+            role={!editingWeight ? "button" : undefined}
+            tabIndex={!editingWeight ? 0 : undefined}
+            aria-label={!editingWeight ? `Registrar peso actual${displayWeight != null ? `, ${displayWeight} kilogramos` : ""}` : undefined}
             className={!editingWeight ? "kilo-pressable" : undefined}
             style={{
               background: "var(--bg-1)",
@@ -256,6 +276,14 @@ export default function ProfilePage() {
             <div
               key={s.l}
               onClick={s.onPress}
+              onKeyDown={s.onPress ? (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  s.onPress?.();
+                }
+              } : undefined}
+              role={s.onPress ? "button" : undefined}
+              tabIndex={s.onPress ? 0 : undefined}
               className={s.onPress ? "kilo-pressable" : undefined}
               style={{
                 background: "var(--bg-1)", border: "1px solid var(--line-1)",
@@ -347,6 +375,7 @@ export default function ProfilePage() {
                 <button
                   key={r.label}
                   onClick={href ? () => router.push(href) : undefined}
+                  disabled={!href}
                   style={{
                     display: "flex", alignItems: "center", gap: 14,
                     padding: "14px 16px", width: "100%",
@@ -402,7 +431,7 @@ export default function ProfilePage() {
           kilo<span style={{ color: "var(--lime)" }}>.</span>
         </div>
         <div style={{ textAlign: "center", marginTop: 4, fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--text-3)", letterSpacing: "0.1em" }}>
-          v1.0 · BUILD 2026.05
+          v0.1 · BUILD 2026.09
         </div>
 
         <div style={{ height: 20 }} />

@@ -159,6 +159,8 @@ create table if not exists public.meal_items (
 );
 
 create index if not exists meal_items_meal_idx on public.meal_items(meal_id);
+create index if not exists meal_items_food_idx on public.meal_items(food_id);
+create index if not exists meal_items_barcode_product_idx on public.meal_items(barcode_product_id);
 
 -- ─── Habits ───────────────────────────────────────────────────────────────────
 

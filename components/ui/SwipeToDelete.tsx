@@ -37,6 +37,7 @@ export function SwipeToDelete({
   const [dx, setDx] = useState(0);
   const [armed, setArmed] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const dragging = useRef(false);
   const moved = useRef(false);
@@ -67,6 +68,7 @@ export function SwipeToDelete({
   const onPointerDown = (e: React.PointerEvent) => {
     if (disabled || removing) return;
     dragging.current = true;
+    setIsDragging(true);
     moved.current = false;
     startX.current = e.clientX;
     startDx.current = dx;
@@ -91,6 +93,7 @@ export function SwipeToDelete({
   const settle = () => {
     if (!dragging.current) return;
     dragging.current = false;
+    setIsDragging(false);
 
     if (armed) {
       if (dx <= -SECOND_SWIPE) return triggerDelete();
@@ -202,7 +205,7 @@ export function SwipeToDelete({
         style={{
           position: "relative",
           transform: `translateX(${dx}px)`,
-          transition: dragging.current ? "none" : "transform 260ms cubic-bezier(0.22,1,0.36,1)",
+          transition: isDragging ? "none" : "transform 260ms cubic-bezier(0.22,1,0.36,1)",
           willChange: "transform",
         }}
       >

@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Sheet } from "@/components/ui/Sheet";
 import { SectionHead } from "@/components/ui/SectionHead";
 import { IconCamera, IconClose, IconPlus } from "@/components/icons";
 import { useProgressPhotos, type ProgressPhoto } from "@/hooks/useProgressPhotos";
 import { useUndoableDelete } from "@/hooks/useUndoableDelete";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
 
 const mono = "var(--font-mono)";
 
@@ -18,7 +19,7 @@ function daysBetween(a: string, b: string) {
 }
 
 export function ProgressPhotos({ defaultWeight }: { defaultWeight?: number | null }) {
-  const { photos, loading, uploading, addPhoto, deletePhoto } = useProgressPhotos();
+  const { photos, loading, uploading, error, addPhoto, deletePhoto } = useProgressPhotos();
   const { remove, isPending } = useUndoableDelete(
     (id) => deletePhoto(id),
     { label: "Foto eliminada" }
@@ -41,10 +42,15 @@ export function ProgressPhotos({ defaultWeight }: { defaultWeight?: number | nul
 
   const visible = useMemo(() => photos.filter((p) => !isPending(p.id)), [photos, isPending]);
 
+  useEffect(() => () => {
+    if (pendingPreview) URL.revokeObjectURL(pendingPreview);
+  }, [pendingPreview]);
+
   function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f) return;
+    if (pendingPreview) URL.revokeObjectURL(pendingPreview);
     setPendingFile(f);
     setPendingPreview(URL.createObjectURL(f));
     setWeightInput(defaultWeight != null ? String(defaultWeight) : "");
@@ -90,6 +96,11 @@ export function ProgressPhotos({ defaultWeight }: { defaultWeight?: number | nul
       />
 
       <div style={{ padding: "0 20px" }}>
+        {error && (
+          <div style={{ marginBottom: 10 }}>
+            <ErrorBanner title="No pudimos actualizar tus fotos" message={error} />
+          </div>
+        )}
         {compareMode && (
           <div style={{ fontSize: 11, color: "var(--text-3)", fontFamily: mono, marginBottom: 10, letterSpacing: "0.02em" }}>
             Elegí 2 fotos para comparar · {compareSel.length}/2
@@ -172,7 +183,7 @@ export function ProgressPhotos({ defaultWeight }: { defaultWeight?: number | nul
       <input ref={galleryRef} type="file" accept="image/*" onChange={onPick} style={{ display: "none" }} />
 
       {/* ── Sheet: elegir origen de la foto ── */}
-      <Sheet open={sourcePickerOpen} onClose={() => setSourcePickerOpen(false)} height="auto">
+      <Sheet open={sourcePickerOpen} onClose={() => setSourcePickerOpen(false)} height="auto" ariaLabel="Elegir origen de la foto">
         <div style={{ padding: "8px 20px 28px" }}>
           <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 500, letterSpacing: "-0.02em", color: "var(--text-1)", marginBottom: 16 }}>
             Agregar foto
@@ -199,7 +210,7 @@ export function ProgressPhotos({ defaultWeight }: { defaultWeight?: number | nul
       </Sheet>
 
       {/* ── Sheet: metadata de la nueva foto ── */}
-      <Sheet open={!!pendingFile} onClose={closeUpload} height="auto">
+      <Sheet open={!!pendingFile} onClose={closeUpload} height="auto" ariaLabel="Nueva foto de progreso">
         <div style={{ padding: "8px 20px 28px" }}>
           <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 500, letterSpacing: "-0.02em", color: "var(--text-1)", marginBottom: 14 }}>
             Nueva foto de progreso
@@ -240,7 +251,7 @@ export function ProgressPhotos({ defaultWeight }: { defaultWeight?: number | nul
       {viewing && (
         <Overlay onClose={() => setViewing(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          {viewing.url && <img src={viewing.url} alt="" style={{ width: "100%", borderRadius: 18, maxHeight: "60vh", objectFit: "contain" }} />}
+          {viewing.url && <img src={viewing.url} alt={`Foto de progreso del ${fmtDate(viewing.taken_at)}`} style={{ width: "100%", borderRadius: 18, maxHeight: "60vh", objectFit: "contain" }} />}
           <div style={{ marginTop: 16, display: "flex", alignItems: "baseline", gap: 10 }}>
             <span style={{ fontFamily: "var(--font-display)", fontSize: 22, color: "var(--text-1)" }}>{fmtDate(viewing.taken_at)}</span>
             {viewing.weight_kg != null && <span style={{ fontFamily: mono, fontSize: 15, color: "var(--lime)", fontWeight: 600 }}>{viewing.weight_kg} kg</span>}
@@ -267,7 +278,7 @@ export function ProgressPhotos({ defaultWeight }: { defaultWeight?: number | nul
             {[compareA, compareB].map((p, i) => (
               <div key={p.id}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                {p.url && <img src={p.url} alt="" style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover", borderRadius: 14 }} />}
+                {p.url && <img src={p.url} alt={`Foto ${i === 0 ? "anterior" : "posterior"} del ${fmtDate(p.taken_at)}`} style={{ width: "100%", aspectRatio: "3 / 4", objectFit: "cover", borderRadius: 14 }} />}
                 <div style={{ marginTop: 6, fontFamily: mono, fontSize: 11, color: "var(--text-3)" }}>{i === 0 ? "ANTES" : "DESPUÉS"}</div>
                 <div style={{ fontFamily: mono, fontSize: 12.5, color: "var(--text-1)" }}>{fmtDate(p.taken_at)}</div>
                 {p.weight_kg != null && <div style={{ fontFamily: mono, fontSize: 12.5, color: "var(--lime)", fontWeight: 600 }}>{p.weight_kg} kg</div>}
@@ -306,6 +317,9 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
   return (
     <div
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Detalle de foto de progreso"
       style={{
         position: "fixed", inset: 0, zIndex: 70,
         background: "rgba(0,0,0,0.85)", backdropFilter: "blur(4px)",
@@ -315,6 +329,7 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
       <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 360 }}>
         <button
           onClick={onClose}
+          aria-label="Cerrar detalle de foto"
           style={{
             marginLeft: "auto", marginBottom: 12, display: "flex",
             width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center",

@@ -18,7 +18,6 @@ interface HabitRowProps {
 export function HabitRow({ Icon, name, sub, streak, done, color, progress, onClick, onToggle }: HabitRowProps) {
   return (
     <div
-      onClick={onClick}
       className="kilo-pressable"
       style={{
         background: done ? "rgba(198,255,80,0.04)" : "var(--bg-1)",
@@ -28,9 +27,19 @@ export function HabitRow({ Icon, name, sub, streak, done, color, progress, onCli
         display: "flex",
         alignItems: "center",
         gap: 12,
-        cursor: onClick ? "pointer" : "default",
       }}
     >
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={!onClick}
+        aria-label={`Abrir hábito ${name}`}
+        style={{
+          flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12,
+          padding: 0, border: "none", background: "transparent", color: "inherit",
+          textAlign: "left", cursor: onClick ? "pointer" : "default",
+        }}
+      >
       <div style={{
         width: 36,
         height: 36,
@@ -76,6 +85,7 @@ export function HabitRow({ Icon, name, sub, streak, done, color, progress, onCli
         <IconFlame size={11} color={done ? "var(--lime)" : "var(--text-2)"} />
         {streak}
       </div>
+      </button>
 
       {onToggle ? (
         <CheckToggle done={done} onToggle={onToggle} size={26} color="var(--lime)" aria-label={`Marcar "${name}" como hecho`} />

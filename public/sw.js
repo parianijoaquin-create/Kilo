@@ -1,8 +1,8 @@
-// Minimal service worker so the app is installable on Chrome / Android.
-// Network-first strategy with offline fallback for navigations.
+// Service worker mínimo para instalación y notificaciones.
+// Las páginas con datos personales nunca se guardan en Cache Storage.
 
-const CACHE = "kilo-shell-v1";
-const PRECACHE = ["/", "/dashboard", "/manifest.json", "/icon.svg"];
+const CACHE = "kilo-shell-v3";
+const PRECACHE = ["/offline", "/manifest.json", "/icon.svg", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)).catch(() => {}));
@@ -24,8 +24,8 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "Kilo";
   const opts = {
     body: payload.body || "",
-    icon: payload.icon || "/icon.svg",
-    badge: "/icon.svg",
+    icon: payload.icon || "/icon-192.png",
+    badge: "/icon-192.png",
     data: { url: payload.url || "/dashboard" },
     tag: payload.tag,
   };
@@ -52,18 +52,27 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // Never cache Supabase / API requests
+  // Nunca interceptar APIs ni datos de terceros.
   if (url.pathname.startsWith("/api/")) return;
 
-  event.respondWith(
-    fetch(req)
-      .then((res) => {
-        if (req.mode === "navigate" && res.ok) {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-        }
+  if (req.mode === "navigate") {
+    event.respondWith(fetch(req).catch(() => caches.match("/offline")));
+    return;
+  }
+
+  const isStaticAsset =
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname === "/icon.svg" ||
+    url.pathname === "/icon-192.png" ||
+    url.pathname === "/icon-512.png" ||
+    url.pathname === "/manifest.json";
+
+  if (isStaticAsset) {
+    event.respondWith(
+      caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+        if (res.ok) caches.open(CACHE).then((cache) => cache.put(req, res.clone())).catch(() => {});
         return res;
-      })
-      .catch(() => caches.match(req).then((cached) => cached || caches.match("/dashboard")))
-  );
+      }))
+    );
+  }
 });

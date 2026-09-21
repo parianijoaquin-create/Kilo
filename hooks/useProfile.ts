@@ -3,10 +3,8 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/context/AuthContext";
-import { readCache, writeCache, useIsoLayoutEffect } from "@/lib/localCache";
+import { readCache, userCacheKey, writeCache, useIsoLayoutEffect } from "@/lib/localCache";
 import type { Profile } from "@/types";
-
-const CACHE_KEY = "kilo:profile";
 
 export function useProfile() {
   const { userId, loading: authLoading } = useAuth();
@@ -14,16 +12,21 @@ export function useProfile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
+  const cacheKey = userId ? userCacheKey(userId, "profile") : null;
 
   // Hidrata el último perfil conocido antes del primer paint (sin parpadeo).
   useIsoLayoutEffect(() => {
-    const cached = readCache<Profile>(CACHE_KEY);
-    if (cached) setProfile(cached);
-  }, []);
+    if (!cacheKey) return;
+    const cached = readCache<Profile>(cacheKey);
+    if (cached) {
+      setProfile(cached);
+      setLoading(false);
+    }
+  }, [cacheKey]);
 
   useEffect(() => {
     if (authLoading) return;
-    if (!userId) { setLoading(false); return; }
+    if (!userId) return;
 
     let cancelled = false;
 
@@ -35,7 +38,10 @@ export function useProfile() {
         .single();
 
       if (!cancelled) {
-        if (data) { setProfile(data as Profile); writeCache(CACHE_KEY, data); }
+        if (data) {
+          setProfile(data as Profile);
+          if (cacheKey) writeCache(cacheKey, data);
+        }
         setError(error?.message ?? null);
         setLoading(false);
       }
@@ -43,7 +49,7 @@ export function useProfile() {
 
     load();
     return () => { cancelled = true; };
-  }, [supabase, userId, authLoading]);
+  }, [supabase, userId, authLoading, cacheKey]);
 
   const updateProfile = useCallback(async (updates: Partial<Profile>) => {
     if (!userId) return { error: "No autenticado" };
@@ -55,9 +61,12 @@ export function useProfile() {
       .select()
       .single();
 
-    if (!error && data) { setProfile(data as Profile); writeCache(CACHE_KEY, data); }
+    if (!error && data) {
+      setProfile(data as Profile);
+      if (cacheKey) writeCache(cacheKey, data);
+    }
     return { error: error?.message ?? null };
-  }, [supabase, userId]);
+  }, [supabase, userId, cacheKey]);
 
-  return { profile, loading, error, updateProfile };
+  return { profile, loading: authLoading || (!!userId && loading), error, updateProfile };
 }

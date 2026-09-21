@@ -46,8 +46,13 @@ begin
 end;
 $$;
 
+-- Este RPC acepta un user_id y también protege un contador global. Exponerlo a
+-- authenticated permitiría agotar el cupo de otra persona o el global. Solo los
+-- Route Handlers del servidor, usando service_role, pueden ejecutarlo.
+revoke execute on function public.consume_rate_limit(uuid, text, int, int)
+  from public, anon, authenticated;
 grant execute on function public.consume_rate_limit(uuid, text, int, int)
-  to authenticated, service_role;
+  to service_role;
 
 -- Limpieza opcional de ventanas viejas (corré esto cada tanto o en el cron):
 --   delete from public.api_rate_limits where window_start < now() - interval '1 day';

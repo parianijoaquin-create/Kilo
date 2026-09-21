@@ -1,11 +1,22 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
 import { AuthProvider } from "@/context/AuthContext";
 import { SheetProvider } from "@/context/SheetContext";
 import { ToastProvider } from "@/context/ToastContext";
-import { AddFoodSheet } from "@/components/food/AddFoodSheet";
+import { useSheet } from "@/context/SheetContext";
 import { ServiceWorkerRegister } from "@/components/layout/ServiceWorkerRegister";
+
+const AddFoodSheet = dynamic(
+  () => import("@/components/food/AddFoodSheet").then((module) => module.AddFoodSheet),
+  { ssr: false }
+);
+
+function DeferredAddFoodSheet() {
+  const { isOpen } = useSheet();
+  return isOpen ? <AddFoodSheet /> : null;
+}
 
 export function ClientProviders({ children }: { children: ReactNode }) {
   return (
@@ -13,7 +24,7 @@ export function ClientProviders({ children }: { children: ReactNode }) {
       <ToastProvider>
         <SheetProvider>
           {children}
-          <AddFoodSheet />
+          <DeferredAddFoodSheet />
           <ServiceWorkerRegister />
         </SheetProvider>
       </ToastProvider>

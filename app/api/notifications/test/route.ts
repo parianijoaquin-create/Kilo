@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   let body = "¡Funciona! Las notificaciones de Kilo están activas.";
   try {
     const json = (await request.json()) as { body?: string };
-    if (json?.body) body = json.body;
+    if (typeof json?.body === "string" && json.body.trim()) body = json.body.trim().slice(0, 200);
   } catch { /* ignore */ }
 
   const payload = JSON.stringify({

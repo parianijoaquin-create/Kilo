@@ -184,6 +184,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
+  const supabase = adminClient();
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -192,7 +193,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!(await consumeRateLimit(userClient, user.id, "food_photo", RATE_LIMIT_MAX))) {
+  if (!(await consumeRateLimit(supabase, user.id, "food_photo", RATE_LIMIT_MAX))) {
     return NextResponse.json(
       { error: "Demasiadas fotos seguidas. Esperá un momento." },
       { status: 429 }
@@ -224,7 +225,7 @@ export async function POST(request: NextRequest) {
   // Techo global diario: corta TODAS las llamadas a Gemini al llegar al tope,
   // para no superar el free tier ni generar cargos. Se chequea recién acá,
   // sobre requests válidas, para no gastar cupo en fotos rechazadas.
-  if (!(await consumeGlobalDailyCap(userClient, "gemini_photo", GEMINI_DAILY_CAP))) {
+  if (!(await consumeGlobalDailyCap(supabase, "gemini_photo", GEMINI_DAILY_CAP))) {
     return NextResponse.json(
       { error: "El análisis por foto alcanzó el límite diario. Probá de nuevo mañana o cargá el alimento manualmente." },
       { status: 429 }
@@ -246,7 +247,7 @@ export async function POST(request: NextRequest) {
             { inlineData: { mimeType: file.type, data: base64 } },
             {
               text: hint
-                ? `Identificá este alimento y estimá sus calorías y macros.\n\nEl usuario aclaró qué es: "${hint}". Tomá esa aclaración como la identidad correcta del/los alimento(s) (tiene prioridad sobre lo que creas ver) y usala para elegir los componentes y sus macros. Seguí estimando porción y gramos a partir de la imagen.`
+                ? `Identificá este alimento y estimá sus calorías y macros.\n\nEl usuario escribió esta aclaración: "${hint}". Usala en dos sentidos:\n1. IDENTIDAD: tomala como la identidad correcta del/los alimento(s) (tiene prioridad sobre lo que creas ver) para elegir los componentes y sus macros.\n2. CANTIDAD: si la aclaración menciona cantidades, porciones o tamaños (ej: "media porción", "un plato chico", "200g de arroz", "dos milanesas"), usá ese dato para ajustar los gramos estimados; tiene prioridad sobre lo que deducirías solo de la imagen. Si no dice nada de cantidad, estimá porción y gramos a partir de la imagen como siempre.`
                 : "Identificá este alimento y estimá sus calorías y macros.",
             },
           ],
@@ -279,7 +280,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const supabase = adminClient();
   const confidence = Math.min(1, Math.max(0, numberFrom(result.confidence)));
   const dishName = result.name.trim();
   const portionMin = Math.round(numberFrom(result.portion_min_g)) || null;

@@ -12,13 +12,26 @@ interface KcalHeroCardProps {
 
 export function KcalHeroCard({ kcalLogged, kcalGoal, onClick }: KcalHeroCardProps) {
   const remaining = kcalGoal - kcalLogged;
-  const consumedPct = Math.round((kcalLogged / kcalGoal) * 100);
+  const exceeded = remaining < 0;
+  const consumedPct = Math.round((kcalLogged / Math.max(kcalGoal, 1)) * 100);
+  const status = exceeded
+    ? `Superaste tu objetivo por ${fmtNum(Math.abs(remaining))} kcal.`
+    : kcalLogged === 0
+      ? "Todavía no registraste comidas hoy."
+      : `Te quedan ${fmtNum(remaining)} kcal para tu objetivo.`;
 
   return (
-    <div
+    <button
+      type="button"
       onClick={onClick}
+      disabled={!onClick}
+      aria-label="Abrir detalle del diario de calorías"
       className="kilo-pressable"
       style={{
+        width: "100%",
+        textAlign: "left",
+        color: "inherit",
+        fontFamily: "inherit",
         background: "var(--bg-1)",
         border: "1px solid var(--line-1)",
         borderRadius: 22,
@@ -51,10 +64,10 @@ export function KcalHeroCard({ kcalLogged, kcalGoal, onClick }: KcalHeroCardProp
             fontFamily: "var(--font-mono)",
             fontWeight: 600,
           }}>
-            RESTANTES HOY
+            {exceeded ? "EXCEDIDAS HOY" : "RESTANTES HOY"}
           </div>
           <div style={{ marginTop: 6 }}>
-            <Stat value={fmtNum(remaining)} unit="kcal" size={54} color="var(--lime)" />
+            <Stat value={fmtNum(Math.abs(remaining))} unit="kcal" size={54} color={exceeded ? "var(--orange)" : "var(--lime)"} />
           </div>
           <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 6, fontFamily: "var(--font-mono)" }}>
             {fmtNum(kcalLogged)} / {fmtNum(kcalGoal)} consumidas
@@ -95,10 +108,9 @@ export function KcalHeroCard({ kcalLogged, kcalGoal, onClick }: KcalHeroCardProp
           boxShadow: "0 0 6px var(--lime)",
         }} />
         <span style={{ fontSize: 11.5, color: "var(--text-2)", flex: 1 }}>
-          Vas bien encaminado. Quedan{" "}
-          <strong style={{ color: "var(--text-1)" }}>2 comidas</strong> por registrar.
+          {status}
         </span>
       </div>
-    </div>
+    </button>
   );
 }

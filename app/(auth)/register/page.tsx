@@ -2,15 +2,20 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { authErrorMessage } from "@/lib/authError";
 
 export default function RegisterPage() {
   const { signUp } = useAuth();
+  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -20,11 +25,20 @@ export default function RegisterPage() {
       return;
     }
     setLoading(true);
-    const { error } = await signUp(email, password, name);
+    const { error, needsEmailConfirmation } = await signUp(email, password, name);
     if (error) {
-      setError(error.message);
+      setError(authErrorMessage(error.code, error.message));
       setLoading(false);
+      return;
     }
+
+    if (needsEmailConfirmation) {
+      setConfirmationEmail(email);
+      setLoading(false);
+      return;
+    }
+
+    router.push("/onboarding");
   }
 
   return (
@@ -74,13 +88,33 @@ export default function RegisterPage() {
             color: "var(--text-1)",
             margin: "0 0 24px",
           }}>
-            Crear cuenta
+            {confirmationEmail ? "Revisá tu email" : "Crear cuenta"}
           </h2>
 
+          {confirmationEmail ? (
+            <div role="status" aria-live="polite">
+              <div style={{
+                padding: "14px 16px",
+                background: "rgba(198,255,80,0.06)",
+                border: "1px solid rgba(198,255,80,0.25)",
+                borderRadius: 12,
+                color: "var(--text-2)",
+                fontSize: 13.5,
+                lineHeight: 1.55,
+              }}>
+                Te enviamos un enlace de confirmación a <strong style={{ color: "var(--text-1)" }}>{confirmationEmail}</strong>.
+                Confirmá tu cuenta y después ingresá para completar tu perfil.
+              </div>
+              <Link href="/login" style={{ ...submitBtn, display: "block", textAlign: "center", textDecoration: "none", boxSizing: "border-box" }}>
+                Ir a ingresar
+              </Link>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
-              <label style={labelStyle}>Nombre</label>
+              <label htmlFor="register-name" style={labelStyle}>Nombre</label>
               <input
+                id="register-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -91,8 +125,9 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label style={labelStyle}>Email</label>
+              <label htmlFor="register-email" style={labelStyle}>Email</label>
               <input
+                id="register-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -104,20 +139,28 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label style={labelStyle}>Contraseña</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mínimo 8 caracteres"
-                required
-                autoComplete="new-password"
-                style={inputStyle}
-              />
+              <label htmlFor="register-password" style={labelStyle}>Contraseña</label>
+              <div style={{ position: "relative" }}>
+                <input
+                  id="register-password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mínimo 8 caracteres"
+                  required
+                  autoComplete="new-password"
+                  style={{ ...inputStyle, paddingRight: 78 }}
+                />
+                <button type="button" onClick={() => setShowPassword((value) => !value)}
+                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  style={passwordToggleStyle}>
+                  {showPassword ? "Ocultar" : "Mostrar"}
+                </button>
+              </div>
             </div>
 
             {error && (
-              <div style={{
+              <div role="alert" style={{
                 padding: "10px 14px",
                 background: "rgba(255,107,107,0.08)",
                 border: "0.5px solid rgba(255,107,107,0.3)",
@@ -137,6 +180,7 @@ export default function RegisterPage() {
               {loading ? "Creando cuenta…" : "Crear cuenta"}
             </button>
           </form>
+          )}
         </div>
 
         {/* Footer link */}
@@ -190,4 +234,17 @@ const submitBtn: React.CSSProperties = {
   letterSpacing: "-0.01em",
   marginTop: 6,
   transition: "opacity 0.15s",
+};
+
+const passwordToggleStyle: React.CSSProperties = {
+  position: "absolute",
+  right: 10,
+  top: "50%",
+  transform: "translateY(-50%)",
+  border: "none",
+  background: "transparent",
+  color: "var(--lime)",
+  fontSize: 11.5,
+  fontWeight: 600,
+  cursor: "pointer",
 };

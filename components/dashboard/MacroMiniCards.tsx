@@ -22,11 +22,18 @@ export function MacroMiniCards({ macros, onClick }: MacroMiniCardsProps) {
           const color = MACRO_COLORS[key];
           const remaining = m.goal - m.current;
           return (
-            <div
+            <button
+              type="button"
               key={key}
               onClick={onClick}
+              disabled={!onClick}
+              aria-label={`Ver detalle de ${m.label}: ${m.current} de ${m.goal} gramos`}
               className="kilo-pressable"
               style={{
+                width: "100%",
+                textAlign: "left",
+                color: "inherit",
+                fontFamily: "inherit",
                 background: "var(--bg-1)",
                 border: "1px solid var(--line-1)",
                 borderRadius: 18,
@@ -66,9 +73,9 @@ export function MacroMiniCards({ macros, onClick }: MacroMiniCardsProps) {
               </div>
               <Bar value={m.current} max={m.goal} color={color} height={3} />
               <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 6, fontFamily: "var(--font-mono)" }}>
-                faltan {remaining}g
+                {remaining > 0 ? `faltan ${remaining}g` : remaining < 0 ? `superaste ${Math.abs(remaining)}g` : "meta alcanzada"}
               </div>
-            </div>
+            </button>
           );
         }
       )}

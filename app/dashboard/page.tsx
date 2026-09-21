@@ -70,9 +70,9 @@ export default function DashboardPage() {
       raw_estimation: food.barcode_product_id ? { source: "open_food_facts" } : {},
     });
   };
-  const { habits, toggleHabit } = useHabits();
-  const { latestWeight, sparkData } = useWeightLog();
-  const { glasses: water } = useWater(today);
+  const { habits, toggleHabit, error: habitsError } = useHabits();
+  const { latestWeight, sparkData, error: weightError } = useWeightLog();
+  const { glasses: water, error: waterError } = useWater(today);
   const waterGoal = profile?.water_goal_glasses ?? 8;
 
   const goToDiary  = () => router.push("/diary");
@@ -160,7 +160,7 @@ export default function DashboardPage() {
 
         {/* Aviso si falló la sincronización con el servidor (los datos que se ven
             pueden venir de caché local). */}
-        {(diaryError || profileError) && (
+        {(diaryError || profileError || habitsError || weightError || waterError) && (
           <div style={{ padding: "16px 20px 0" }}>
             <ErrorBanner
               title="No pudimos sincronizar tus datos"
@@ -232,10 +232,12 @@ export default function DashboardPage() {
         {/* Agua + Peso */}
         <div style={{ padding: "16px 20px 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {/* Agua → navega a Diario */}
-          <div
+          <button
+            type="button"
             onClick={goToDiary}
+            aria-label="Abrir registro de agua en el diario"
             className="kilo-pressable"
-            style={{ background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 18, padding: 14, cursor: "pointer" }}
+            style={{ width: "100%", textAlign: "left", color: "inherit", background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 18, padding: 14, cursor: "pointer" }}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <IconDroplet size={18} color="var(--blue)" />
@@ -250,13 +252,15 @@ export default function DashboardPage() {
               vasos de agua hoy
             </div>
             <Bar value={Math.min(water, waterGoal)} max={waterGoal} color="var(--blue)" height={4} />
-          </div>
+          </button>
 
           {/* Weight → navega a Perfil */}
-          <div
+          <button
+            type="button"
             onClick={() => router.push("/profile")}
+            aria-label="Abrir historial de peso en el perfil"
             className="kilo-pressable"
-            style={{ background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 18, padding: 14, cursor: "pointer" }}
+            style={{ width: "100%", textAlign: "left", color: "inherit", background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 18, padding: 14, cursor: "pointer" }}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <IconScale size={18} color="var(--lime)" />
@@ -274,7 +278,7 @@ export default function DashboardPage() {
               {sparkData.length > 0 ? `peso · ${sparkData.length} registros` : "peso · registrá en Perfil"}
             </div>
             <WeightSpark data={sparkData} />
-          </div>
+          </button>
         </div>
 
         {/* Meals → "Ver diario" navega a Diario */}

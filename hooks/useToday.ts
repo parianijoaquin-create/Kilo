@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-function todayStr() {
-  // Fecha local (no UTC). "en-CA" formatea como YYYY-MM-DD.
-  return new Date().toLocaleDateString("en-CA");
-}
+import { todayLocal } from "@/lib/date";
 
 function msUntilNextMidnight() {
   const now = new Date();
@@ -16,20 +12,20 @@ function msUntilNextMidnight() {
 
 /** Returns today's date as YYYY-MM-DD and re-renders automatically at local midnight. */
 export function useToday() {
-  const [date, setDate] = useState(todayStr);
+  const [date, setDate] = useState(todayLocal);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     function schedule() {
       timer = setTimeout(() => {
-        setDate(todayStr());
+        setDate(todayLocal());
         schedule();
       }, msUntilNextMidnight());
     }
     schedule();
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") setDate(todayStr());
+      if (document.visibilityState === "visible") setDate(todayLocal());
     };
     document.addEventListener("visibilitychange", onVisible);
 

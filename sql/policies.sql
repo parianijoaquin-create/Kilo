@@ -155,13 +155,25 @@ using (user_id = auth.uid());
 drop policy if exists "habit_logs_insert_own" on public.habit_logs;
 create policy "habit_logs_insert_own"
   on public.habit_logs for insert to authenticated
-with check (user_id = auth.uid());
+with check (
+  user_id = auth.uid()
+  and exists (
+    select 1 from public.habits h
+    where h.id = habit_id and h.user_id = auth.uid()
+  )
+);
 
 drop policy if exists "habit_logs_update_own" on public.habit_logs;
 create policy "habit_logs_update_own"
   on public.habit_logs for update to authenticated
 using (user_id = auth.uid())
-with check (user_id = auth.uid());
+with check (
+  user_id = auth.uid()
+  and exists (
+    select 1 from public.habits h
+    where h.id = habit_id and h.user_id = auth.uid()
+  )
+);
 
 drop policy if exists "habit_logs_delete_own" on public.habit_logs;
 create policy "habit_logs_delete_own"
@@ -228,6 +240,12 @@ using (user_id = auth.uid());
 drop policy if exists "push_subscriptions_insert_own" on public.push_subscriptions;
 create policy "push_subscriptions_insert_own"
   on public.push_subscriptions for insert to authenticated
+with check (user_id = auth.uid());
+
+drop policy if exists "push_subscriptions_update_own" on public.push_subscriptions;
+create policy "push_subscriptions_update_own"
+  on public.push_subscriptions for update to authenticated
+using (user_id = auth.uid())
 with check (user_id = auth.uid());
 
 drop policy if exists "push_subscriptions_delete_own" on public.push_subscriptions;

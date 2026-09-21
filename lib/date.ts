@@ -36,3 +36,19 @@ export function localDayRangeUtc(date: string): { start: string; end: string } {
 export function localNoonUtc(date: string): string {
   return new Date(`${date}T12:00:00.000`).toISOString();
 }
+
+/** Conserva la hora local de un instante y la aplica a otro día local. */
+export function localTimeOnDateUtc(date: string, sourceInstant: string): string {
+  const source = new Date(sourceInstant);
+  const hh = String(source.getHours()).padStart(2, "0");
+  const mm = String(source.getMinutes()).padStart(2, "0");
+  const ss = String(source.getSeconds()).padStart(2, "0");
+  return new Date(`${date}T${hh}:${mm}:${ss}.000`).toISOString();
+}
+
+/** Desplaza una fecha calendario local sin pasar por una medianoche UTC. */
+export function shiftLocalDate(date: string, days: number): string {
+  const value = new Date(`${date}T12:00:00.000`);
+  value.setDate(value.getDate() + days);
+  return toLocalDate(value);
+}

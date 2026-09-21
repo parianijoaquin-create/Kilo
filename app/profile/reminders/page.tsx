@@ -9,6 +9,7 @@ import { useReminders, type ReminderKind, type Reminder } from "@/hooks/useRemin
 import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 import { SwipeToDelete } from "@/components/ui/SwipeToDelete";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import {
   pushSupported,
   ensurePermission,
@@ -26,21 +27,28 @@ const KIND_LABELS: Record<ReminderKind, { label: string; emoji: string }> = {
 };
 
 const DAYS = [
-  { i: 1, l: "L" }, { i: 2, l: "M" }, { i: 3, l: "M" }, { i: 4, l: "J" },
-  { i: 5, l: "V" }, { i: 6, l: "S" }, { i: 7, l: "D" },
+  { i: 1, l: "L", name: "Lunes" }, { i: 2, l: "M", name: "Martes" },
+  { i: 3, l: "M", name: "Miércoles" }, { i: 4, l: "J", name: "Jueves" },
+  { i: 5, l: "V", name: "Viernes" }, { i: 6, l: "S", name: "Sábado" },
+  { i: 7, l: "D", name: "Domingo" },
 ];
+
+function initialPushState(): "unsupported" | "denied" | "loading" {
+  if (!pushSupported()) return "unsupported";
+  if (Notification.permission === "denied") return "denied";
+  return "loading";
+}
 
 export default function RemindersPage() {
   const router = useRouter();
-  const { reminders, loading, createReminder, updateReminder, deleteReminder } = useReminders();
+  const { reminders, loading, error, createReminder, updateReminder, deleteReminder } = useReminders();
   const { remove: removeReminder, isPending: isReminderPending } = useUndoableDelete(deleteReminder, { label: "Recordatorio eliminado" });
 
-  const [pushState, setPushState] = useState<"unsupported" | "denied" | "off" | "on" | "loading" | "error">("loading");
+  const [pushState, setPushState] = useState<"unsupported" | "denied" | "off" | "on" | "loading" | "error">(initialPushState);
   const [pushMsg, setPushMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!pushSupported()) { setPushState("unsupported"); return; }
-    if (Notification.permission === "denied") { setPushState("denied"); return; }
+    if (!pushSupported() || Notification.permission === "denied") return;
     navigator.serviceWorker.ready
       .then((reg) => reg.pushManager.getSubscription())
       .then((s) => setPushState(s ? "on" : "off"))
@@ -90,23 +98,32 @@ export default function RemindersPage() {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
       const endpoint = sub?.endpoint;
-      await unsubscribePush();
       if (endpoint) {
-        await fetch(`/api/notifications/subscribe?endpoint=${encodeURIComponent(endpoint)}`, { method: "DELETE" });
+        const response = await fetch("/api/notifications/subscribe", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint }),
+        });
+        if (!response.ok) throw new Error("No pudimos quitar la suscripción del servidor.");
       }
+      await unsubscribePush();
       setPushState("off");
-    } catch {
+    } catch (error) {
       setPushState("error");
-      setPushMsg("No pudimos desuscribirnos.");
+      setPushMsg(error instanceof Error ? error.message : "No pudimos desuscribirnos.");
     }
   }
 
   async function sendTest() {
     setPushMsg(null);
-    const res = await fetch("/api/notifications/test", { method: "POST" });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) setPushMsg(json?.error ?? `Error ${res.status}`);
-    else setPushMsg(`Enviada a ${json.sent} dispositivo(s).`);
+    try {
+      const res = await fetch("/api/notifications/test", { method: "POST" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) setPushMsg(json?.error ?? `Error ${res.status}`);
+      else setPushMsg(`Enviada a ${json.sent} dispositivo(s).`);
+    } catch {
+      setPushMsg("No pudimos conectar con el servidor de notificaciones.");
+    }
   }
 
   return (
@@ -129,6 +146,16 @@ export default function RemindersPage() {
             letterSpacing: "-0.03em", color: "var(--text-1)", margin: 0,
           }}>Recordatorios</h1>
         </div>
+
+        {error && (
+          <div style={{ padding: "12px 20px 0" }}>
+            <ErrorBanner
+              title="No pudimos sincronizar tus recordatorios"
+              message="Los cambios pueden no estar actualizados."
+              onRetry={() => window.location.reload()}
+            />
+          </div>
+        )}
 
         {/* Push state card */}
         <div style={{ padding: "16px 20px 0" }}>
@@ -166,7 +193,7 @@ export default function RemindersPage() {
             </div>
 
             {pushMsg && pushState !== "error" && (
-              <div style={{ marginTop: 10, fontSize: 11.5, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
+              <div role="status" aria-live="polite" style={{ marginTop: 10, fontSize: 11.5, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
                 {pushMsg}
               </div>
             )}
@@ -233,13 +260,14 @@ function ReminderRow({ reminder, onToggle }: {
         </div>
       </div>
 
-      <label style={{ position: "relative", display: "inline-block", width: 38, height: 22 }}>
-        <input
-          type="checkbox"
-          checked={reminder.enabled}
-          onChange={(e) => onToggle(e.target.checked)}
-          style={{ display: "none" }}
-        />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={reminder.enabled}
+        aria-label={`${reminder.enabled ? "Desactivar" : "Activar"} recordatorio ${reminder.label}`}
+        onClick={() => onToggle(!reminder.enabled)}
+        style={{ position: "relative", width: 38, height: 22, padding: 0, border: 0, background: "transparent", cursor: "pointer" }}
+      >
         <span style={{
           position: "absolute", inset: 0,
           background: reminder.enabled ? "var(--lime)" : "var(--bg-2)",
@@ -251,7 +279,7 @@ function ReminderRow({ reminder, onToggle }: {
           width: 16, height: 16, background: "var(--text-1)", borderRadius: "50%",
           transition: "left 0.15s",
         }} />
-      </label>
+      </button>
     </div>
   );
 }
@@ -320,6 +348,7 @@ function NewReminderForm({ onCreate }: {
         {(Object.keys(KIND_LABELS) as ReminderKind[]).map((k) => (
           <button
             type="button" key={k} onClick={() => setKind(k)}
+            aria-pressed={kind === k}
             style={{
               padding: "6px 10px", borderRadius: 100,
               background: kind === k ? "var(--lime)" : "var(--bg-2)",
@@ -334,6 +363,7 @@ function NewReminderForm({ onCreate }: {
       </div>
 
       <input
+        aria-label="Etiqueta del recordatorio"
         value={label}
         onChange={(e) => setLabel(e.target.value)}
         placeholder="Etiqueta (ej. Almuerzo)"
@@ -344,6 +374,7 @@ function NewReminderForm({ onCreate }: {
         <span style={{ fontSize: 11.5, color: "var(--text-3)" }}>Hora</span>
         <input
           type="time"
+          aria-label="Hora del recordatorio"
           value={time}
           onChange={(e) => setTime(e.target.value)}
           style={{ ...input, flex: 1, fontFamily: "var(--font-mono)" }}
@@ -357,6 +388,8 @@ function NewReminderForm({ onCreate }: {
             <button
               type="button" key={d.i}
               onClick={() => setDays(on ? days.filter((x) => x !== d.i) : [...days, d.i])}
+              aria-label={d.name}
+              aria-pressed={on}
               style={{
                 width: 36, height: 36, borderRadius: "50%",
                 background: on ? "var(--lime)" : "var(--bg-2)",

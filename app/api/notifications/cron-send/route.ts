@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
+import { timingSafeEqual } from "node:crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,13 @@ function vapidConfigured() {
   return true;
 }
 
+function validSecret(provided: string | null, expected: string | undefined) {
+  if (!provided || !expected) return false;
+  const providedBytes = Buffer.from(provided);
+  const expectedBytes = Buffer.from(expected);
+  return providedBytes.length === expectedBytes.length && timingSafeEqual(providedBytes, expectedBytes);
+}
+
 /**
  * Returns the ISO weekday (1=Mon..7=Sun) in the user's local time zone.
  * Today we assume Argentina time. If users span timezones, store offset per profile.
@@ -74,11 +82,12 @@ const KIND_EMOJI: Record<string, string> = {
 
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
-  const provided =
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
-    request.nextUrl.searchParams.get("secret");
+  const authorization = request.headers.get("authorization");
+  const provided = authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null;
 
-  if (!secret || provided !== secret) {
+  // El secreto solo viaja en Authorization: las query strings suelen quedar en
+  // logs de servidor, CDN y analítica.
+  if (!validSecret(provided, secret)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -162,6 +171,7 @@ export async function GET(request: NextRequest) {
   }
 
   const stale: string[] = [];
+  const deliveredReminderIds = new Set<string>();
   let sent = 0;
 
   await Promise.all(matched.map(async (r) => {
@@ -181,6 +191,7 @@ export async function GET(request: NextRequest) {
           payload
         );
         sent++;
+        deliveredReminderIds.add(reminder.id);
       } catch (err) {
         const status = (err as { statusCode?: number } | null)?.statusCode;
         if (status === 404 || status === 410) stale.push(s.endpoint);
@@ -194,11 +205,11 @@ export async function GET(request: NextRequest) {
 
   // Marcamos como enviados para que la próxima corrida (ventana solapada) no
   // los reprocese. Se libera solo al pasar DEDUP_WINDOW_MS (siguiente día).
-  if (dedupEnabled) {
+  if (dedupEnabled && deliveredReminderIds.size > 0) {
     await supabase
       .from("reminders")
       .update({ last_sent_at: new Date(nowMs).toISOString() })
-      .in("id", matched.map((r) => r.id));
+      .in("id", [...deliveredReminderIds]);
   }
 
   return NextResponse.json({
