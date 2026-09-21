@@ -7,6 +7,7 @@ import { SheetProvider } from "@/context/SheetContext";
 import { ToastProvider } from "@/context/ToastContext";
 import { useSheet } from "@/context/SheetContext";
 import { ServiceWorkerRegister } from "@/components/layout/ServiceWorkerRegister";
+import { NotificationOnboarding } from "@/components/layout/NotificationOnboarding";
 
 const AddFoodSheet = dynamic(
   () => import("@/components/food/AddFoodSheet").then((module) => module.AddFoodSheet),
@@ -26,6 +27,7 @@ export function ClientProviders({ children }: { children: ReactNode }) {
           {children}
           <DeferredAddFoodSheet />
           <ServiceWorkerRegister />
+          <NotificationOnboarding />
         </SheetProvider>
       </ToastProvider>
     </AuthProvider>

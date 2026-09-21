@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
 import { timingSafeEqual } from "node:crypto";
+import { isReminderDue } from "@/lib/reminderSchedule";
 
 export const dynamic = "force-dynamic";
 
@@ -19,11 +20,6 @@ interface ReminderRow {
 // menos de esto, lo salteamos: evita duplicados cuando el cron externo corre
 // cada 1, 5 o 10 minutos (la ventana se solapa entre corridas).
 const DEDUP_WINDOW_MS = 6 * 60 * 60 * 1000; // 6 h
-
-function minutesOfDay(timeStr: string): number {
-  const [h, m] = timeStr.split(":");
-  return (Number(h) || 0) * 60 + (Number(m) || 0);
-}
 
 interface SubRow {
   endpoint: string;
@@ -133,16 +129,7 @@ export async function GET(request: NextRequest) {
 
   const matched = (reminders ?? []).filter((row) => {
     const r = row as ReminderRow;
-    if (!r.days_of_week.includes(weekday)) return false;
-
-    // ¿La hora programada cae dentro de los últimos `windowMin` minutos?
-    const remMin = minutesOfDay(r.time_of_day);
-    let due = remMin <= nowMin && remMin > nowMin - windowMin;
-    if (nowMin - windowMin < 0) {
-      // Ventana que cruza medianoche (ej: 00:03 con ventana 10).
-      due = due || remMin > 1440 + (nowMin - windowMin);
-    }
-    if (!due) return false;
+    if (!isReminderDue(r, weekday, nowMin, windowMin)) return false;
 
     // Dedup: ya enviado hace poco → no reenviar.
     if (dedupEnabled && r.last_sent_at && nowMs - new Date(r.last_sent_at).getTime() < DEDUP_WINDOW_MS) {
@@ -173,6 +160,7 @@ export async function GET(request: NextRequest) {
   const stale: string[] = [];
   const deliveredReminderIds = new Set<string>();
   let sent = 0;
+  let failed = 0;
 
   await Promise.all(matched.map(async (r) => {
     const reminder = r as ReminderRow;
@@ -195,6 +183,10 @@ export async function GET(request: NextRequest) {
       } catch (err) {
         const status = (err as { statusCode?: number } | null)?.statusCode;
         if (status === 404 || status === 410) stale.push(s.endpoint);
+        else {
+          failed++;
+          console.error("[push-error]", JSON.stringify({ status: status ?? "unknown" }));
+        }
       }
     }));
   }));
@@ -218,6 +210,7 @@ export async function GET(request: NextRequest) {
     target, weekday,
     matched: matched.length,
     sent,
+    failed,
     pruned: stale.length,
   });
 }

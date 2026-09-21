@@ -12,10 +12,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorBanner } from "@/components/ui/ErrorBanner";
 import {
   pushSupported,
-  ensurePermission,
-  getOrSubscribe,
+  subscribeCurrentDevice,
   unsubscribePush,
-  arrayBufferToBase64,
 } from "@/lib/push";
 
 const KIND_LABELS: Record<ReminderKind, { label: string; emoji: string }> = {
@@ -61,29 +59,7 @@ export default function RemindersPage() {
     if (!vapid) { setPushState("error"); setPushMsg("Falta NEXT_PUBLIC_VAPID_PUBLIC_KEY en el front."); return; }
     setPushState("loading");
     try {
-      const perm = await ensurePermission();
-      if (perm !== "granted") {
-        setPushState(perm === "denied" ? "denied" : "off");
-        setPushMsg(perm === "denied" ? "Habilitá notificaciones desde los ajustes del navegador." : null);
-        return;
-      }
-      const sub = await getOrSubscribe(vapid);
-      if (!sub) { setPushState("error"); setPushMsg("No pudimos suscribirnos."); return; }
-      const res = await fetch("/api/notifications/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          endpoint: sub.endpoint,
-          keys: {
-            p256dh: arrayBufferToBase64(sub.getKey("p256dh")),
-            auth:   arrayBufferToBase64(sub.getKey("auth")),
-          },
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setPushState("error"); setPushMsg(err?.error ?? "Error guardando suscripción."); return;
-      }
+      await subscribeCurrentDevice(vapid);
       setPushState("on");
     } catch (err) {
       setPushState("error");
@@ -134,7 +110,7 @@ export default function RemindersPage() {
             onClick={() => router.push("/profile")}
             aria-label="Volver"
             style={{
-              width: 32, height: 32, borderRadius: 10,
+              width: 44, height: 44, borderRadius: 10,
               background: "var(--bg-1)", border: "1px solid var(--line-1)",
               cursor: "pointer", color: "var(--text-2)",
               display: "flex", alignItems: "center", justifyContent: "center",
@@ -266,16 +242,16 @@ function ReminderRow({ reminder, onToggle }: {
         aria-checked={reminder.enabled}
         aria-label={`${reminder.enabled ? "Desactivar" : "Activar"} recordatorio ${reminder.label}`}
         onClick={() => onToggle(!reminder.enabled)}
-        style={{ position: "relative", width: 38, height: 22, padding: 0, border: 0, background: "transparent", cursor: "pointer" }}
+        style={{ position: "relative", width: 44, height: 44, padding: 0, border: 0, background: "transparent", cursor: "pointer" }}
       >
         <span style={{
-          position: "absolute", inset: 0,
+          position: "absolute", left: 3, right: 3, top: 11, bottom: 11,
           background: reminder.enabled ? "var(--lime)" : "var(--bg-2)",
           borderRadius: 100, cursor: "pointer", transition: "background 0.15s",
           border: "1px solid var(--line-2)",
         }} />
         <span style={{
-          position: "absolute", top: 2, left: reminder.enabled ? 18 : 2,
+          position: "absolute", top: 13, left: reminder.enabled ? 23 : 5,
           width: 16, height: 16, background: "var(--text-1)", borderRadius: "50%",
           transition: "left 0.15s",
         }} />
@@ -350,7 +326,7 @@ function NewReminderForm({ onCreate }: {
             type="button" key={k} onClick={() => setKind(k)}
             aria-pressed={kind === k}
             style={{
-              padding: "6px 10px", borderRadius: 100,
+              minHeight: 44, padding: "6px 10px", borderRadius: 100,
               background: kind === k ? "var(--lime)" : "var(--bg-2)",
               color: kind === k ? "#0a0d15" : "var(--text-2)",
               border: "1px solid var(--line-2)",
@@ -391,7 +367,7 @@ function NewReminderForm({ onCreate }: {
               aria-label={d.name}
               aria-pressed={on}
               style={{
-                width: 36, height: 36, borderRadius: "50%",
+                width: 44, height: 44, borderRadius: "50%",
                 background: on ? "var(--lime)" : "var(--bg-2)",
                 color: on ? "#0a0d15" : "var(--text-2)",
                 border: "1px solid var(--line-2)", cursor: "pointer",
@@ -415,7 +391,7 @@ function NewReminderForm({ onCreate }: {
           type="submit"
           disabled={saving || !label.trim() || days.length === 0}
           style={{
-            flex: 1, padding: "10px 0",
+            flex: 1, minHeight: 44, padding: "10px 0",
             background: "var(--lime)", border: "none",
             borderRadius: 10, color: "#0a0d15",
             fontSize: 12.5, fontWeight: 700,
@@ -427,7 +403,7 @@ function NewReminderForm({ onCreate }: {
           type="button"
           onClick={() => { setOpen(false); reset(); }}
           style={{
-            padding: "10px 16px",
+            minHeight: 44, padding: "10px 16px",
             background: "transparent", border: "1px solid var(--line-2)",
             borderRadius: 10, color: "var(--text-3)",
             fontSize: 12.5, cursor: "pointer",
@@ -439,14 +415,14 @@ function NewReminderForm({ onCreate }: {
 }
 
 const primaryBtn: React.CSSProperties = {
-  flex: 1, padding: "10px 0",
+  flex: 1, minHeight: 44, padding: "10px 0",
   background: "var(--lime)", border: "none",
   borderRadius: 10, color: "#0a0d15",
   fontSize: 12.5, fontWeight: 700, cursor: "pointer",
 };
 
 const secondaryBtn: React.CSSProperties = {
-  flex: 1, padding: "10px 0",
+  flex: 1, minHeight: 44, padding: "10px 0",
   background: "var(--bg-2)", border: "1px solid var(--line-2)",
   borderRadius: 10, color: "var(--text-1)",
   fontSize: 12.5, fontWeight: 500, cursor: "pointer",

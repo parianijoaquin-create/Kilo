@@ -41,6 +41,39 @@ export async function getOrSubscribe(vapidPublicKey: string): Promise<PushSubscr
   });
 }
 
+export async function subscribeCurrentDevice(vapidPublicKey: string): Promise<PushSubscription> {
+  const permission = await ensurePermission();
+  if (permission !== "granted") {
+    throw new Error(
+      permission === "denied"
+        ? "Las notificaciones están bloqueadas en los ajustes del dispositivo."
+        : "Necesitamos tu permiso para enviarte recordatorios."
+    );
+  }
+
+  const subscription = await getOrSubscribe(vapidPublicKey);
+  if (!subscription) throw new Error("No pudimos activar las notificaciones en este dispositivo.");
+
+  const response = await fetch("/api/notifications/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: arrayBufferToBase64(subscription.getKey("p256dh")),
+        auth: arrayBufferToBase64(subscription.getKey("auth")),
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body?.error ?? "No pudimos guardar la suscripción.");
+  }
+
+  return subscription;
+}
+
 export async function unsubscribePush(): Promise<boolean> {
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.getSubscription();
