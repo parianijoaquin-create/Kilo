@@ -42,7 +42,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div style={{
+    <main style={{
       minHeight: "100svh",
       display: "flex",
       alignItems: "center",
@@ -191,7 +191,7 @@ export default function RegisterPage() {
           </Link>
         </p>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -199,7 +199,7 @@ const labelStyle: React.CSSProperties = {
   display: "block",
   fontSize: 11.5,
   fontWeight: 600,
-  color: "var(--text-3)",
+  color: "var(--text-2)",
   letterSpacing: "0.06em",
   textTransform: "uppercase",
   fontFamily: "var(--font-mono)",
@@ -247,4 +247,9 @@ const passwordToggleStyle: React.CSSProperties = {
   fontSize: 11.5,
   fontWeight: 600,
   cursor: "pointer",
+  minWidth: 64,
+  minHeight: 44,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };

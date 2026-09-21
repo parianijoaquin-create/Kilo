@@ -113,7 +113,7 @@ export default function ResetPasswordPage() {
 
 const pageStyle: React.CSSProperties = { minHeight: "100svh", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" };
 const cardStyle: React.CSSProperties = { background: "var(--bg-1)", border: "1px solid var(--line-1)", borderRadius: 24, padding: 28 };
-const labelStyle: React.CSSProperties = { display: "block", marginBottom: 8, fontFamily: "var(--font-mono)", fontSize: 11.5, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" };
+const labelStyle: React.CSSProperties = { display: "block", marginBottom: 8, fontFamily: "var(--font-mono)", fontSize: 11.5, fontWeight: 600, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.06em" };
 const inputStyle: React.CSSProperties = { width: "100%", boxSizing: "border-box", padding: "13px 16px", borderRadius: 12, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--text-1)", fontSize: 15 };
 const submitStyle: React.CSSProperties = { width: "100%", padding: 14, border: "none", borderRadius: 14, background: "var(--lime)", color: "#0a0d15", fontWeight: 700, cursor: "pointer" };
 const secondaryStyle: React.CSSProperties = { width: "100%", marginTop: 16, padding: 12, borderRadius: 12, border: "1px solid var(--line-2)", background: "var(--bg-2)", color: "var(--text-1)", cursor: "pointer" };
