@@ -7,9 +7,9 @@ _Fecha original: 2026-07-27 · Actualización: 2026-09-21 · Alcance: backend (S
 > contraseña, PWA segura, accesibilidad, carga diferida del buscador/scanner, copiado de comidas y manejo de
 > fallos optimistas y onboarding de notificaciones. La compilación, lint, 70 pruebas unitarias y las pruebas
 > públicas E2E pasan. Las migraciones de seguridad y deduplicación de recordatorios fueron aplicadas y
-> verificadas en Supabase el 2026-09-21. También quedaron habilitadas `pg_cron` y `pg_net`. Falta guardar
-> `CRON_SECRET` en Supabase Vault y ejecutar `sql/setup_reminder_cron.sql`; después conviene repetir la batería
-> autenticada con una cuenta que pertenezca al proyecto conectado.
+> verificadas en Supabase el 2026-09-21. `pg_cron`, `pg_net`, Vault y el job de recordatorios cada cinco minutos
+> están activos y verificados de extremo a extremo. Sólo conviene repetir la batería autenticada con una cuenta
+> que pertenezca al proyecto conectado.
 
 > **Corrección de stack.** El prompt asumía **Vite + React + shadcn/ui**. El proyecto real es
 > **Next.js 16 (App Router) + React 19 + Supabase SSR + Gemini (`@google/genai`) + web-push**, con una
@@ -135,11 +135,11 @@ ceros sin avisar. En una app de uso diario eso se lee como "se borraron mis dato
 ## Estado al 2026-09-21
 
 Los cambios de seguridad y confiabilidad documentados en esta auditoría están aplicados y publicados. Las
-migraciones de endurecimiento y `last_sent_at` fueron ejecutadas y verificadas. `pg_cron` y `pg_net` también
-quedaron habilitados. El envío push, la ventana que cruza medianoche y la deduplicación están cubiertos por
-pruebas; el único paso operativo pendiente es guardar `CRON_SECRET` en Vault y ejecutar
-`sql/setup_reminder_cron.sql`. Después corresponde repetir la batería autenticada con una cuenta de la
-instancia conectada, sin alterar sus datos permanentes.
+migraciones de endurecimiento y `last_sent_at` fueron ejecutadas y verificadas. `pg_cron`, `pg_net` y el secreto
+cifrado en Vault están configurados. El job `kilo-reminders-every-5-minutes` quedó activo y una prueba real
+Supabase → Vercel devolvió HTTP 200 con `ok: true`. El envío push, la ventana que cruza medianoche y la
+deduplicación también están cubiertos por pruebas. Sólo corresponde repetir la batería autenticada con una
+cuenta de la instancia conectada, sin alterar sus datos permanentes.
 
 ### Observabilidad y control móvil
 
@@ -158,6 +158,7 @@ instancia conectada, sin alterar sus datos permanentes.
 - El endpoint de producción usa `Authorization: Bearer`, VAPID y service role sólo del lado servidor.
 - `last_sent_at` está presente en producción y evita duplicados entre ventanas solapadas.
 - Supabase tiene `pg_cron` y `pg_net` habilitados desde el 2026-09-21.
-- Pendiente deliberado: copiar `CRON_SECRET` de Vercel a un secreto cifrado de Supabase Vault llamado
-  `kilo_cron_secret` y ejecutar [`sql/setup_reminder_cron.sql`](sql/setup_reminder_cron.sql). No se automatizó
-  esa transferencia porque implica mover una credencial privada entre dos servicios.
+- `CRON_SECRET` está alineado entre Vercel (Production y Preview) y el secreto cifrado de Supabase Vault
+  `kilo_cron_secret`; su valor no se registró en logs ni en Git.
+- [`sql/setup_reminder_cron.sql`](sql/setup_reminder_cron.sql) quedó aplicado: job ID 1, frecuencia de cinco
+  minutos y estado activo. La llamada de verificación respondió HTTP 200, `ok: true`, `matched: 0`, `sent: 0`.
